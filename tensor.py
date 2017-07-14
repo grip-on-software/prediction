@@ -2,6 +2,7 @@
 Tensorflow for sprint features.
 """
 
+from __future__ import print_function
 import argparse
 import math
 import sys
@@ -10,6 +11,130 @@ from scipy.io import arff
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+
+class Model(object):
+    """
+    A generic prediction/classification model that can be trained/optimized.
+    """
+
+    # Index of the loss op.
+    LOSS_OP = 1
+
+    def __init__(self, args, input_dtype, label_dtype, num_features, num_labels):
+        self.args = args
+        self._num_features = num_features
+        self._num_labels = num_labels
+        self._x_input = tf.placeholder(dtype=input_dtype,
+                                       shape=[None, num_features])
+        self._y_labels = tf.placeholder(dtype=label_dtype, shape=[None])
+
+        self._outputs = None
+        self._train_ops = []
+
+    @property
+    def num_features(self):
+        """
+        Retrieve the number of input features that the model accepts.
+        """
+
+        return self._num_features
+
+    @property
+    def num_labels(self):
+        """
+        Retrieve the number of output labels that the model can provide.
+        """
+
+        return self._num_labels
+
+    @property
+    def x_input(self):
+        """
+        Retrieve the input placeholder variable.
+        """
+
+        return self._x_input
+
+    @property
+    def y_labels(self):
+        """
+        Retrieve the output placeholder variable.
+        """
+
+        return self._y_labels
+
+    @property
+    def outputs(self):
+        """
+        Retrieve the actual outputs of the model.
+        """
+
+        return self._outputs
+
+    @property
+    def train_ops(self):
+        """
+        Retrieve the ops to run when training the model.
+        """
+
+        return self._train_ops
+
+    def build(self):
+        """
+        Build the model.
+        """
+
+        raise NotImplementedError('Must be implemented by subclasses')
+
+class MultiLayerPerceptron(Model):
+    """
+    Neural network model with multiple (visible, hidden, ..., output) layers.
+    """
+
+    @staticmethod
+    def make_layer(name, inputs, num_visible, num_hidden):
+        """
+        Make a layer with weights and biases based on the input shapes.
+        """
+
+        with tf.name_scope(name):
+            stddev = 1.0 / math.sqrt(float(num_visible))
+            weights = tf.Variable(tf.truncated_normal([num_visible, num_hidden],
+                                                      stddev=stddev),
+                                  name='weights')
+            biases = tf.Variable(tf.zeros([num_hidden]), name='biases')
+            layer = tf.nn.relu(tf.matmul(inputs, weights) + biases)
+
+        return layer
+
+    def build(self):
+        num_hidden1 = self.args.num_hidden1
+        num_hidden2 = self.args.num_hidden2
+
+        hidden1 = self.make_layer('hidden1', self.x_input, self.num_features,
+                                  num_hidden1)
+        hidden2 = self.make_layer('hidden2', hidden1, num_hidden1, num_hidden2)
+        self._outputs = self.make_layer('softmax_linear', hidden2, num_hidden2,
+                                        self.num_labels)
+
+        loss = tf.reduce_mean(
+            tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y_labels,
+                                                           logits=self.outputs,
+                                                           name='xentropy'),
+            name='xentropy_mean')
+
+        self._train_ops.append(self.make_training(loss))
+        self._train_ops.append(loss)
+
+    def make_training(self, loss):
+        """
+        Set up the training operation.
+        """
+
+        tf.summary.scalar('loss', loss)
+        global_step = tf.Variable(0, name='global_step', trainable=False)
+        optimizer = tf.train.GradientDescentOptimizer(self.args.learning_rate)
+        return optimizer.minimize(loss, global_step=global_step)
 
 def get_parser():
     """
@@ -74,40 +199,14 @@ class Classification(object):
 
         return [inputs, labels]
 
-    @staticmethod
-    def make_layer(name, inputs, num_visible, num_hidden):
-        """
-        Make a layer with weights and biases based on the input shapes.
-        """
-
-        with tf.name_scope(name):
-            stddev = 1.0 / math.sqrt(float(num_visible))
-            weights = tf.Variable(tf.truncated_normal([num_visible, num_hidden],
-                                                      stddev=stddev),
-                                  name='weights')
-            biases = tf.Variable(tf.zeros([num_hidden]), name='biases')
-            layer = tf.nn.relu(tf.matmul(inputs, weights) + biases)
-
-        return layer
-
-    def make_training(self, loss):
-        """
-        Set up the training operation.
-        """
-
-        tf.summary.scalar('loss', loss)
-        global_step = tf.Variable(0, name='global_step', trainable=False)
-        optimizer = tf.train.GradientDescentOptimizer(self.args.learning_rate)
-        return optimizer.minimize(loss, global_step=global_step)
-
-    def run_session(self, ops, placeholders, data_sets):
+    def run_session(self, model, test_op, data_sets):
         """
         Perform the training epoch runs.
         """
 
-        train_op, loss, test_op, logits = ops
-        x_input, y_labels = placeholders
         inputs, labels, test_inputs, test_labels = data_sets
+        x_input = model.x_input
+        y_labels = model.y_labels
 
         with tf.Session() as sess:
             # Create the op for initializing variables.
@@ -136,12 +235,13 @@ class Classification(object):
 
                     batch_input, batch_labels = sess.run([inputs, labels])
                     batch_feed = {x_input: batch_input, y_labels: batch_labels}
-                    loss_value = sess.run([train_op, loss], feed_dict=batch_feed)[1]
+                    loss_value = sess.run(model.train_ops,
+                                          feed_dict=batch_feed)[model.LOSS_OP]
 
                     duration = time.time() - start_time
 
                     if step % 100 == 0:
-                        print("step {}, loss value {:.2f} ({:.3f} sec)".format(step, loss_value, duration))
+                        print("step {}: loss value {:.2f} ({:.3f} sec)".format(step, loss_value, duration))
 
                         summary_str = sess.run(summary_op, feed_dict=batch_feed)
                         summary_writer.add_summary(summary_str, step)
@@ -153,8 +253,6 @@ class Classification(object):
                         test_feed = {x_input: test_input, y_labels: test_label}
                         accuracy = sess.run(test_op, feed_dict=test_feed)
                         print("test accuracy: {:.2%}".format(accuracy))
-                        print(sess.run(logits, feed_dict=test_feed))
-                        print(test_label)
 
                         print("saving training state")
                         saver.save(sess, self.args.train_directory,
@@ -183,18 +281,19 @@ class Classification(object):
                 else:
                     raise ValueError('Index {0} could not be understood'.format(index))
 
-    def get_datasets(self):
-        """
-        Retrieve the training dataset and labels.
-        """
+    def _get_labels(self, data, translation):
+        label_index = next(self._translate([self.args.label], translation))
+        column = np.nan_to_num(data[:, label_index])
+        labels = column.astype(int)
+        if np.any(column - labels) != 0:
+            raise ValueError('Label column {0} has non-round numbers'.format(self.args.label))
 
-        with open(self.args.filename) as features_file:
-            data, meta = arff.loadarff(features_file)
+        if self.args.binary is not None:
+            labels = (labels >= self.args.binary).astype(int)
 
-        print(meta)
+        return labels, label_index
 
-        full_data = np.array([[cell for cell in row] for row in data],
-                             dtype=np.float32)
+    def _select_data(self, full_data, meta):
         name_translation = dict(zip(meta.names(), range(full_data.shape[1])))
 
         if self.args.index:
@@ -207,29 +306,36 @@ class Classification(object):
             indexes -= set(self._translate(self.args.remove, name_translation))
 
         if self.args.label:
-            label_index = next(self._translate([self.args.label],
-                                               name_translation))
+            labels, label_index = self._get_labels(full_data, name_translation)
             indexes.remove(label_index)
-            column = np.nan_to_num(full_data[:, label_index])
-            labels = column.astype(int)
-            if np.any(column - labels) != 0:
-                raise ValueError('Label column {0} has non-round numbers'.format(self.args.label))
-
-            if self.args.binary is not None:
-                labels = (labels >= self.args.binary).astype(int)
 
             print(label_index)
             print(labels)
         else:
-            labels = np.random.randint(0, 1+1, size=(data.shape[0],))
+            labels = np.random.randint(0, 1+1, size=(full_data.shape[0],))
 
         print(indexes)
+        return indexes, labels
 
-        data = np.nan_to_num(full_data[:, tuple(indexes)])
+    def get_datasets(self):
+        """
+        Retrieve the training dataset and labels.
+        """
+
+        with open(self.args.filename) as features_file:
+            data, meta = arff.loadarff(features_file)
+
+        print(meta)
+
+        full_data = np.array([[cell for cell in row] for row in data],
+                             dtype=np.float32)
+        indexes, labels = self._select_data(full_data, meta)
+
+        dataset = np.nan_to_num(full_data[:, tuple(indexes)])
         num_labels = max(labels)+1
 
         train_data, test_data, train_labels, test_labels = \
-            train_test_split(data, labels, test_size=self.args.test_size)
+            train_test_split(dataset, labels, test_size=self.args.test_size)
 
         return [train_data, train_labels, test_data, test_labels, num_labels]
 
@@ -245,33 +351,18 @@ class Classification(object):
         with tf.Graph().as_default():
             # Create the training batches, network, and training ops.
             inputs, labels = self.create_batches(train_data, train_labels)
-
             num_features = train_data.shape[1]
-            num_hidden1 = self.args.num_hidden1
-            num_hidden2 = self.args.num_hidden2
-            x_input = tf.placeholder(dtype=inputs.dtype,
-                                     shape=[None, num_features])
-            y_labels = tf.placeholder(dtype=labels.dtype, shape=[None])
 
-            hidden1 = self.make_layer('hidden1', x_input, num_features, num_hidden1)
-            hidden2 = self.make_layer('hidden2', hidden1, num_hidden1, num_hidden2)
-            logits = self.make_layer('softmax_linear', hidden2, num_hidden2, num_labels)
-
-            loss = tf.reduce_mean(
-                tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_labels,
-                                                               logits=logits,
-                                                               name='xentropy'),
-                name='xentropy_mean')
-
-            train_op = self.make_training(loss)
+            model = MultiLayerPerceptron(self.args, inputs.dtype, labels.dtype,
+                                         num_features, num_labels)
+            model.build()
 
             # Create the testing batches and test ops.
             test_inputs, test_y = self.create_batches(test_data, test_labels)
-            correct = tf.equal(tf.argmax(logits, 1), test_y)
+            correct = tf.equal(tf.argmax(model.outputs, 1), test_y)
             accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
 
-            self.run_session([train_op, loss, accuracy, logits],
-                             [x_input, y_labels],
+            self.run_session(model, accuracy,
                              [inputs, labels, test_inputs, test_y])
 
 def bootstrap():
