@@ -4,8 +4,11 @@ Tensorflow for sprint features.
 
 from __future__ import print_function
 import argparse
+import copy
+import glob
 import logging
 import math
+import os
 import random
 import sys
 import time
@@ -381,6 +384,11 @@ def get_parser():
                         help='Convert label to binary classifications')
     parser.add_argument('--train-directory', dest='train_directory',
                         default='/tmp/data', help='Output of training')
+    parser.add_argument('--clean', default=False, action='store_true',
+                        help='Remove model files from train directory')
+    parser.add_argument('--clean-patterns', nargs='*', dest='clean_patterns',
+                        default=Cleaner.DEFAULT_PATTERNS,
+                        help='Glob patterns to remove from train directory')
     parser.add_argument('--num-epochs', dest='num_epochs', type=int,
                         default=1000, help='Number of epochs to train')
     parser.add_argument('--batch-size', dest='batch_size', type=int,
@@ -531,6 +539,44 @@ class Dataset(object):
         if data_set in self._batches:
             del self._batches[data_set]
 
+class Cleaner(object):
+    """
+    File cleaner for TensorFlow checkpoint files.
+    """
+
+    DEFAULT_PATTERNS = [
+        "checkpoint", "graph.phtxt", "events.outs.tfevents.*", "model.ckpt-*.*"
+    ]
+
+    def __init__(self, patterns=None):
+        if patterns is None:
+            patterns = self.DEFAULT_PATTERNS
+
+        self.set_patterns(patterns)
+
+    def add_pattern(self, pattern):
+        """
+        Add a glob pattern to the list of file patterns to match and remove.
+        """
+
+        self._patterns.append(pattern)
+
+    def set_patterns(self, patterns):
+        """
+        Relace the list of patterns to match and remove.
+        """
+
+        self._patterns = copy.copy(patterns)
+
+    def clean(self, directory):
+        """
+        Remove checkpoint files and related files from the `directory`.
+        """
+
+        for pattern in self._patterns:
+            for path in glob.glob(os.path.join(directory, pattern)):
+                os.remove(path)
+
 class Classification(object):
     """
     Classification of sprint features.
@@ -560,6 +606,10 @@ class Classification(object):
         """
         Main entry point.
         """
+
+        if self.args.clean:
+            cleaner = Cleaner(self.args.clean_patterns)
+            cleaner.clean(self.args.train_directory)
 
         logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s',
                             level=getattr(logging, self.args.log.upper(), None))
