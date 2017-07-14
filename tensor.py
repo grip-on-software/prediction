@@ -12,9 +12,101 @@ import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
+class Runner(object):
+    """
+    Train/optimize runner.
+    """
+
+    def __init__(self, session, model, train_directory, test_op):
+        self._session = session
+        self._model = model
+        self._train_directory = train_directory
+        self._test_op = test_op
+
+        # Input enqueue coordinator
+        self._coordinator = tf.train.Coordinator()
+
+        # Build the summary operation based on the collection of summaries.
+        self._summary_op = tf.summary.merge_all()
+
+        self._summary_writer = tf.summary.FileWriter(self._train_directory,
+                                                     self._session.graph)
+
+    def run(self, *datasets):
+        """
+        Perform the iterative optimization task.
+        """
+
+        # Start input enqueue threads.
+        threads = tf.train.start_queue_runners(sess=self._session,
+                                               coord=self._coordinator)
+
+        try:
+            self.loop(*datasets)
+        finally:
+            # When done, ask the threads to stop.
+            self._coordinator.request_stop()
+
+        # Wait for threads to finish.
+        self._coordinator.join(threads)
+
+    def loop(self, *datasets):
+        """
+        Perform the internal loop of iterative training and test accuracy
+        reporting.
+        """
+
+        # Create a saver for writing training checkpoints.
+        saver = tf.train.Saver()
+
+        inputs, labels, test_inputs, test_labels = datasets
+        x_input = self._model.x_input
+        y_labels = self._model.y_labels
+
+        try:
+            step = 0
+            while not self._coordinator.should_stop():
+                start_time = time.time()
+
+                batch_input, batch_labels = self._session.run([inputs, labels])
+                batch_feed = {x_input: batch_input, y_labels: batch_labels}
+                train_values = self._session.run(self._model.train_ops,
+                                                 feed_dict=batch_feed)
+
+                duration = time.time() - start_time
+
+                if step % 100 == 0:
+                    self._train_progress(step, batch_feed, train_values, duration)
+                if step % 1000 == 0:
+                    test_input, test_label = self._session.run([test_inputs, test_labels])
+                    test_feed = {x_input: test_input, y_labels: test_label}
+                    accuracy = self._session.run(self._test_op,
+                                                 feed_dict=test_feed)
+                    print("test accuracy: {:.2%}".format(accuracy))
+
+                    print("saving training state")
+                    saver.save(self._session, self._train_directory,
+                               global_step=step)
+
+                step = step + 1
+        except tf.errors.OutOfRangeError:
+            print("saving after %d steps" % step)
+            saver.save(self._session, self._train_directory, global_step=step)
+
+    def _train_progress(self, step, batch_feed, train_values, duration):
+        args = (step, train_values[self._model.LOSS_OP], duration)
+        print("step {}: loss value {:.2f} ({:.3f} sec)".format(*args))
+
+        summary_str = self._session.run(self._summary_op, feed_dict=batch_feed)
+        self._summary_writer.add_summary(summary_str, step)
+
+        accuracy = self._session.run(self._test_op, feed_dict=batch_feed)
+        print("train accuracy: {:.2%}".format(accuracy))
+
 class Model(object):
     """
-    A generic prediction/classification model that can be trained/optimized.
+    A generic prediction/classification model that can be trained/optimized
+    through TensorFlow graphs.
     """
 
     # Index of the loss op.
@@ -205,8 +297,6 @@ class Classification(object):
         """
 
         inputs, labels, test_inputs, test_labels = data_sets
-        x_input = model.x_input
-        y_labels = model.y_labels
 
         with tf.Session() as sess:
             # Create the op for initializing variables.
@@ -215,59 +305,8 @@ class Classification(object):
 
             sess.run(init_op)
 
-            # Build the summary operation based on the collection of summaries.
-            summary_op = tf.summary.merge_all()
-
-            # Create a saver for writing training checkpoints.
-            saver = tf.train.Saver()
-
-            summary_writer = tf.summary.FileWriter(self.args.train_directory,
-                                                   sess.graph)
-
-            # Start input enqueue threads.
-            coord = tf.train.Coordinator()
-            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-
-            try:
-                step = 0
-                while not coord.should_stop():
-                    start_time = time.time()
-
-                    batch_input, batch_labels = sess.run([inputs, labels])
-                    batch_feed = {x_input: batch_input, y_labels: batch_labels}
-                    loss_value = sess.run(model.train_ops,
-                                          feed_dict=batch_feed)[model.LOSS_OP]
-
-                    duration = time.time() - start_time
-
-                    if step % 100 == 0:
-                        print("step {}: loss value {:.2f} ({:.3f} sec)".format(step, loss_value, duration))
-
-                        summary_str = sess.run(summary_op, feed_dict=batch_feed)
-                        summary_writer.add_summary(summary_str, step)
-
-                        accuracy = sess.run(test_op, feed_dict=batch_feed)
-                        print("train accuracy: {:.2%}".format(accuracy))
-                    if step % 1000 == 0:
-                        test_input, test_label = sess.run([test_inputs, test_labels])
-                        test_feed = {x_input: test_input, y_labels: test_label}
-                        accuracy = sess.run(test_op, feed_dict=test_feed)
-                        print("test accuracy: {:.2%}".format(accuracy))
-
-                        print("saving training state")
-                        saver.save(sess, self.args.train_directory,
-                                   global_step=step)
-
-                    step = step + 1
-            except tf.errors.OutOfRangeError:
-                print("saving after %d steps" % step)
-                saver.save(sess, self.args.train_directory, global_step=step)
-            finally:
-                # When done, ask the threads to stop.
-                coord.request_stop()
-
-            # Wait for threads to finish.
-            coord.join(threads)
+            runner = Runner(sess, model, self.args.train_directory, test_op)
+            runner.run(inputs, labels, test_inputs, test_labels)
 
     def _translate(self, indices, translation):
         for index in indices:
