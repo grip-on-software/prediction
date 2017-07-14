@@ -5,6 +5,7 @@ Tensorflow for sprint features.
 from __future__ import print_function
 import argparse
 import math
+import random
 import sys
 import time
 from scipy.io import arff
@@ -308,6 +309,8 @@ def get_parser():
                         default=1, help='Number of threads to run the training')
     parser.add_argument('--test-size', dest='test_size', type=float,
                         default=0.20, help='Ratio of dataset to use for test')
+    parser.add_argument('--seed', type=int, default=None, nargs='?', const=0,
+                        help='Set a predefined random seed')
 
     models = Model.get_model_names()
     parser.add_argument('--model', choices=models, default='mlp',
@@ -439,11 +442,18 @@ class Classification(object):
         Main entry point.
         """
 
+        if self.args.seed is not None:
+            random.seed(self.args.seed)
+            np.random.seed(self.args.seed)
+
         train_data, train_labels, test_data, test_labels, num_labels = \
             self.get_datasets()
 
         # Tell TensorFlow that the model will be built into the default Graph.
         with tf.Graph().as_default():
+            if self.args.seed is not None:
+                tf.set_random_seed(self.args.seed)
+
             # Create the training batches, network, and training ops.
             inputs, labels = self.create_batches(train_data, train_labels)
             num_features = train_data.shape[1]
