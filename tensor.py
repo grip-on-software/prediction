@@ -112,12 +112,54 @@ class Model(object):
     # Index of the loss op.
     LOSS_OP = 1
 
-    def __init__(self, args, input_dtype, label_dtype, num_features, num_labels):
+    _models = {}
+
+    @classmethod
+    def register(cls, name):
+        """
+        Register a model by its short name.
+        """
+
+        def decorator(target):
+            """
+            Decorator for Model classes.
+            """
+
+            cls._models[name] = target
+            return target
+
+        return decorator
+
+    @classmethod
+    def get_model_names(cls):
+        """
+        Retrieve a list of short names for the registered models.
+        """
+
+        return list(cls._models.keys())
+
+    @classmethod
+    def get_model(cls, name):
+        """
+        Retrieve the Model class associated with the given `name`.
+        """
+
+        return cls._models[name]
+
+    @classmethod
+    def add_arguments(cls, parser):
+        """
+        Add arguments to an argument parser.
+        """
+
+        pass
+
+    def __init__(self, args, dtypes, sizes):
         self.args = args
-        self._num_features = num_features
-        self._num_labels = num_labels
+        self._num_features, self._num_labels = sizes
+        input_dtype, label_dtype = dtypes
         self._x_input = tf.placeholder(dtype=input_dtype,
-                                       shape=[None, num_features])
+                                       shape=[None, self._num_features])
         self._y_labels = tf.placeholder(dtype=label_dtype, shape=[None])
 
         self._outputs = None
@@ -178,10 +220,19 @@ class Model(object):
 
         raise NotImplementedError('Must be implemented by subclasses')
 
+@Model.register('mlp')
 class MultiLayerPerceptron(Model):
     """
     Neural network model with multiple (visible, hidden, ..., output) layers.
     """
+
+    @classmethod
+    def add_arguments(cls, parser):
+        group = parser.add_argument_group('MLP', 'Multi-layered perceptron')
+        group.add_argument('--num-hidden1', dest='num_hidden1', type=int,
+                           default=128, help='Number of units in hidden layer 1')
+        group.add_argument('--num-hidden2', dest='num_hidden2', type=int,
+                           default=32, help='Number of units in hidden layer 2')
 
     @staticmethod
     def make_layer(name, inputs, num_visible, num_hidden):
@@ -251,16 +302,21 @@ def get_parser():
                         default=1000, help='Number of epochs to train')
     parser.add_argument('--batch-size', dest='batch_size', type=int,
                         default=100, help='Size to divide the training set in')
-    parser.add_argument('--num-threads', dest='num_threads', type=int,
-                        default=1, help='Number of threads to run the training')
-    parser.add_argument('--num-hidden1', dest='num_hidden1', type=int,
-                        default=128, help='Number of units in hidden layer 1')
-    parser.add_argument('--num-hidden2', dest='num_hidden2', type=int,
-                        default=32, help='Number of units in hidden layer 2')
     parser.add_argument('--learning-rate', dest='learning_rate', type=float,
                         default=0.01, help='Initial learning rate')
+    parser.add_argument('--num-threads', dest='num_threads', type=int,
+                        default=1, help='Number of threads to run the training')
     parser.add_argument('--test-size', dest='test_size', type=float,
                         default=0.20, help='Ratio of dataset to use for test')
+
+    models = Model.get_model_names()
+    parser.add_argument('--model', choices=models, default='mlp',
+                        help='Prediction model to use')
+
+    for model in models:
+        model_class = Model.get_model(model)
+        model_class.add_arguments(parser)
+
     return parser
 
 class Classification(object):
@@ -392,8 +448,9 @@ class Classification(object):
             inputs, labels = self.create_batches(train_data, train_labels)
             num_features = train_data.shape[1]
 
-            model = MultiLayerPerceptron(self.args, inputs.dtype, labels.dtype,
-                                         num_features, num_labels)
+            model_class = Model.get_model(self.args.model)
+            model = model_class(self.args, [inputs.dtype, labels.dtype],
+                                [num_features, num_labels])
             model.build()
 
             # Create the testing batches and test ops.
