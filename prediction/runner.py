@@ -130,3 +130,16 @@ class TFLearnRunner(Runner):
         self._model.predictor.fit(input_fn=_get_train_input,
                                   max_steps=self.args.num_epochs,
                                   monitors=[monitor])
+
+class TFSKLRunner(Runner):
+    """
+    Runner for models implemented in TensorFlow but imitating scikit-learn.
+    """
+
+    def loop(self, datasets):
+        datasets.clear_batches(datasets.TRAIN)
+        datasets.clear_batches(datasets.TEST)
+
+        self._model.predictor.fit(*datasets.data_sets[datasets.TRAIN])
+
+        # ...

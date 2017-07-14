@@ -4,7 +4,7 @@ TensorFlow prediction models.
 
 import math
 import tensorflow as tf
-from .runner import TFRunner, TFLearnRunner
+from .runner import TFRunner, TFLearnRunner, TFSKLRunner
 
 class Model(object):
     """
@@ -227,3 +227,27 @@ class DNNModel(LearnModel):
                                                         feature_columns=columns,
                                                         n_classes=self.num_labels,
                                                         config=run_config)
+
+@Model.register('dbn')
+class DBNModel(LearnModel):
+    """
+    Deep belief network classifier.
+    """
+
+    RUNNER = TFSKLRunner
+
+    def build(self):
+        try:
+            from dbn.tensorflow import SupervisedDBNClassification
+        except ImportError:
+            raise
+
+        self.predictor = SupervisedDBNClassification(
+            hidden_layers_structure=[256, 256],
+            learning_rate_rbm=0.05,
+            learning_rate=self.args.learning_rate,
+            n_epochs_rbm=10,
+            n_iter_backprop=self.args.num_epochs,
+            batch_size=self.args.batch_size,
+            activation_function='relu',
+            dropout_p=0.2)
