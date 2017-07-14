@@ -22,10 +22,10 @@ class Runner(object):
     Train/optimize runner.
     """
 
-    def __init__(self, session, model, train_directory, test_op):
+    def __init__(self, args, session, model, test_op):
+        self.args = args
         self._session = session
         self._model = model
-        self._train_directory = train_directory
         self._test_op = test_op
 
         # Input enqueue coordinator
@@ -34,7 +34,7 @@ class Runner(object):
         # Build the summary operation based on the collection of summaries.
         self._summary_op = tf.summary.merge_all()
 
-        self._summary_writer = tf.summary.FileWriter(self._train_directory,
+        self._summary_writer = tf.summary.FileWriter(self.args.train_directory,
                                                      self._session.graph)
 
     def run(self, datasets):
@@ -89,33 +89,34 @@ class TFRunner(Runner):
 
                 duration = time.time() - start_time
 
-                if step % 100 == 0:
+                if step % self.args.train_interval == 0:
                     self._train_progress(step, batch_feed, train_values, duration)
-                if step % 1000 == 0:
+                if step % self.args.test_interval == 0:
                     test_input, test_label = self._session.run([test_inputs, test_labels])
                     test_feed = {x_input: test_input, y_labels: test_label}
                     accuracy = self._session.run(self._test_op,
                                                  feed_dict=test_feed)
-                    print("test accuracy: {:.2%}".format(accuracy))
+                    logging.info("test accuracy: %f", accuracy)
 
-                    print("saving training state")
-                    saver.save(self._session, self._train_directory,
+                    logging.info("saving training state")
+                    saver.save(self._session, self.args.train_directory,
                                global_step=step)
 
                 step = step + 1
         except tf.errors.OutOfRangeError:
-            print("saving after %d steps" % step)
-            saver.save(self._session, self._train_directory, global_step=step)
+            logging.info("saving after %d steps", step)
+            saver.save(self._session, self.args.train_directory,
+                       global_step=step)
 
     def _train_progress(self, step, batch_feed, train_values, duration):
-        args = (step, train_values[self._model.LOSS_OP], duration)
-        print("step {}: loss value {:.2f} ({:.3f} sec)".format(*args))
+        logging.info("step %d: loss value %.2f (%.3f sec)", step,
+                     train_values[self._model.LOSS_OP], duration)
 
         summary_str = self._session.run(self._summary_op, feed_dict=batch_feed)
         self._summary_writer.add_summary(summary_str, step)
 
         accuracy = self._session.run(self._test_op, feed_dict=batch_feed)
-        print("train accuracy: {:.2%}".format(accuracy))
+        logging.info("train accuracy: %f", accuracy)
 
 class TFLearnRunner(Runner):
     """
@@ -136,11 +137,12 @@ class TFLearnRunner(Runner):
             datasets.clear_batches(datasets.TEST)
             return datasets.get_batches(datasets.TEST)
 
-        monitor = tf.contrib.learn.monitors.ValidationMonitor(input_fn=_get_test_input,
-                                                              every_n_steps=1000)
+        monitor_class = tf.contrib.learn.monitors.ValidationMonitor
+        monitor = monitor_class(input_fn=_get_test_input,
+                                every_n_steps=self.args.test_interval)
 
         self._model.predictor.fit(input_fn=_get_train_input,
-                                  max_steps=4000,
+                                  max_steps=self.args.num_epochs,
                                   monitors=[monitor])
 
 class Model(object):
@@ -395,6 +397,10 @@ def get_parser():
                         default=100, help='Size to divide the training set in')
     parser.add_argument('--learning-rate', dest='learning_rate', type=float,
                         default=0.01, help='Initial learning rate')
+    parser.add_argument('--train-interval', dest='train_interval', type=int,
+                        default=100, help='Number of epochs for train progress')
+    parser.add_argument('--test-interval', dest='test_interval', type=int,
+                        default=1000, help='Number of epochs for test progress')
     parser.add_argument('--num-threads', dest='num_threads', type=int,
                         default=1, help='Number of threads to run the training')
     parser.add_argument('--test-size', dest='test_size', type=float,
@@ -468,12 +474,11 @@ class Dataset(object):
             labels, label_index = self._get_labels(full_data, name_translation)
             indexes.remove(label_index)
 
-            print(label_index)
-            print(labels)
+            logging.debug('Selected label %d: %r', label_index, labels)
         else:
             labels = np.random.randint(0, 1+1, size=(full_data.shape[0],))
 
-        print(indexes)
+        logging.debug('Leftover indices: %r', indexes)
         return indexes, labels
 
     def load_datasets(self):
@@ -484,7 +489,7 @@ class Dataset(object):
         with open(self.args.filename) as features_file:
             data, meta = arff.loadarff(features_file)
 
-        print(meta)
+        logging.debug('Metadata:\n%r', meta)
 
         full_data = np.array([[cell for cell in row] for row in data],
                              dtype=np.float32)
@@ -493,7 +498,7 @@ class Dataset(object):
         dataset = np.nan_to_num(full_data[:, tuple(indexes)])
         names = [name for index, name in enumerate(meta) if index in indexes]
 
-        print(names)
+        logging.debug('Leftover column names: %r', names)
 
         train_data, test_data, train_labels, test_labels = \
             train_test_split(dataset, labels, test_size=self.args.test_size)
@@ -599,7 +604,7 @@ class Classification(object):
             sess.run(init_op)
 
             run_class = model.RUNNER
-            runner = run_class(sess, model, self.args.train_directory, test_op)
+            runner = run_class(self.args, sess, model, test_op)
             runner.run(data_sets)
 
     def main(self, _):
