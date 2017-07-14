@@ -4,6 +4,7 @@ Tensorflow for sprint features.
 
 from __future__ import print_function
 import argparse
+import logging
 import math
 import random
 import sys
@@ -33,7 +34,7 @@ class Runner(object):
         self._summary_writer = tf.summary.FileWriter(self._train_directory,
                                                      self._session.graph)
 
-    def run(self, *datasets):
+    def run(self, datasets):
         """
         Perform the iterative optimization task.
         """
@@ -43,7 +44,7 @@ class Runner(object):
                                                coord=self._coordinator)
 
         try:
-            self.loop(*datasets)
+            self.loop(datasets)
         finally:
             # When done, ask the threads to stop.
             self._coordinator.request_stop()
@@ -51,16 +52,25 @@ class Runner(object):
         # Wait for threads to finish.
         self._coordinator.join(threads)
 
-    def loop(self, *datasets):
+    def loop(self, datasets):
         """
         Perform the internal loop of iterative training and test accuracy
         reporting.
         """
 
+        raise NotImplementedError('Must be implemented by subclasses')
+
+class TFRunner(Runner):
+    """
+    Runner for pure TensorFlow models.
+    """
+
+    def loop(self, datasets):
         # Create a saver for writing training checkpoints.
         saver = tf.train.Saver()
 
-        inputs, labels, test_inputs, test_labels = datasets
+        inputs, labels = datasets.get_batches(datasets.TRAIN)
+        test_inputs, test_labels = datasets.get_batches(datasets.TEST)
         x_input = self._model.x_input
         y_labels = self._model.y_labels
 
@@ -104,6 +114,32 @@ class Runner(object):
         accuracy = self._session.run(self._test_op, feed_dict=batch_feed)
         print("train accuracy: {:.2%}".format(accuracy))
 
+class TFLearnRunner(Runner):
+    """
+    Runner for TensorFlow Learn models.
+    """
+
+    def loop(self, datasets):
+        if not isinstance(self._model, LearnModel):
+            raise TypeError('Only suitable for TF Learn models')
+
+        def _get_train_input():
+            # Enforce new graph
+            datasets.clear_batches(datasets.TRAIN)
+            return datasets.get_batches(datasets.TRAIN)
+
+        def _get_test_input():
+            # Enforce new graph
+            datasets.clear_batches(datasets.TEST)
+            return datasets.get_batches(datasets.TEST)
+
+        monitor = tf.contrib.learn.monitors.ValidationMonitor(input_fn=_get_test_input,
+                                                              every_n_steps=1000)
+
+        self._model.predictor.fit(input_fn=_get_train_input,
+                                  max_steps=4000,
+                                  monitors=[monitor])
+
 class Model(object):
     """
     A generic prediction/classification model that can be trained/optimized
@@ -112,6 +148,8 @@ class Model(object):
 
     # Index of the loss op.
     LOSS_OP = 1
+
+    RUNNER = TFRunner
 
     _models = {}
 
@@ -227,6 +265,8 @@ class MultiLayerPerceptron(Model):
     Neural network model with multiple (visible, hidden, ..., output) layers.
     """
 
+    RUNNER = TFRunner
+
     @classmethod
     def add_arguments(cls, parser):
         group = parser.add_argument_group('MLP', 'Multi-layered perceptron')
@@ -280,6 +320,48 @@ class MultiLayerPerceptron(Model):
         optimizer = tf.train.GradientDescentOptimizer(self.args.learning_rate)
         return optimizer.minimize(loss, global_step=global_step)
 
+class LearnModel(Model):
+    """
+    Model based on a TensorFlow Learn estimator.
+    """
+
+    RUNNER = TFLearnRunner
+
+    def __init__(self, args, dtypes, sizes):
+        super(LearnModel, self).__init__(args, dtypes, sizes)
+        self.predictor = None
+
+    def build(self):
+        raise NotImplementedError('Must be implemented by subclasses')
+
+@Model.register('dnn')
+class DNNModel(LearnModel):
+    """
+    Deep neural network model from TFLearn.
+    """
+
+    @classmethod
+    def add_arguments(cls, parser):
+        group = parser.add_argument_group('MLP', 'Multi-layered perceptron')
+        group.add_argument('--hiddens', nargs='+', type=int,
+                           default=[100, 150, 100],
+                           help='Number of units per hidden layer')
+
+    def build(self):
+        columns = [
+            tf.contrib.layers.real_valued_column("",
+                                                 dimension=self.num_features,
+                                                 dtype=self.x_input.dtype)
+        ]
+
+        run_config = tf.contrib.learn.RunConfig(save_checkpoints_secs=1,
+                                                model_dir=self.args.train_directory)
+
+        self.predictor = tf.contrib.learn.DNNClassifier(hidden_units=self.args.hiddens,
+                                                        feature_columns=columns,
+                                                        n_classes=self.num_labels,
+                                                        config=run_config)
+
 def get_parser():
     """
     Create a parser to parse command line arguments.
@@ -311,6 +393,9 @@ def get_parser():
                         default=0.20, help='Ratio of dataset to use for test')
     parser.add_argument('--seed', type=int, default=None, nargs='?', const=0,
                         help='Set a predefined random seed')
+    parser.add_argument('--log', default='WARNING',
+                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                        help='Log level (WARNING by default)')
 
     models = Model.get_model_names()
     parser.add_argument('--model', choices=models, default='mlp',
@@ -322,50 +407,18 @@ def get_parser():
 
     return parser
 
-class Classification(object):
+class Dataset(object):
     """
-    Classification of sprint features.
+    Dataset selector and provider.
     """
+
+    TRAIN = 0
+    TEST = 1
 
     def __init__(self, args):
         self.args = args
-
-    def create_batches(self, train_data, train_labels):
-        """
-        Create batches of the training input/labels.
-        """
-
-        with tf.name_scope('input'):
-            # Input data, pin to CPU because rest of pipeline is CPU-only
-            with tf.device('/cpu:0'):
-                inputs = tf.constant(train_data)
-                labels = tf.constant(train_labels)
-
-                inputs, labels = tf.train.slice_input_producer([inputs, labels],
-                                                               num_epochs=self.args.num_epochs)
-                inputs, labels = tf.train.batch([inputs, labels],
-                                                batch_size=self.args.batch_size,
-                                                num_threads=self.args.num_threads,
-                                                allow_smaller_final_batch=True)
-
-        return [inputs, labels]
-
-    def run_session(self, model, test_op, data_sets):
-        """
-        Perform the training epoch runs.
-        """
-
-        inputs, labels, test_inputs, test_labels = data_sets
-
-        with tf.Session() as sess:
-            # Create the op for initializing variables.
-            init_op = tf.group(tf.global_variables_initializer(),
-                               tf.local_variables_initializer())
-
-            sess.run(init_op)
-
-            runner = Runner(sess, model, self.args.train_directory, test_op)
-            runner.run(inputs, labels, test_inputs, test_labels)
+        self.load_datasets()
+        self._batches = {}
 
     def _translate(self, indices, translation):
         for index in indices:
@@ -415,9 +468,9 @@ class Classification(object):
         print(indexes)
         return indexes, labels
 
-    def get_datasets(self):
+    def load_datasets(self):
         """
-        Retrieve the training dataset and labels.
+        Load the dataset and split into train/test, and inputs/labels.
         """
 
         with open(self.args.filename) as features_file:
@@ -430,24 +483,92 @@ class Classification(object):
         indexes, labels = self._select_data(full_data, meta)
 
         dataset = np.nan_to_num(full_data[:, tuple(indexes)])
-        num_labels = max(labels)+1
+        names = [name for index, name in enumerate(meta) if index in indexes]
+
+        print(names)
 
         train_data, test_data, train_labels, test_labels = \
             train_test_split(dataset, labels, test_size=self.args.test_size)
 
-        return [train_data, train_labels, test_data, test_labels, num_labels]
+        self.data_sets = {
+            self.TRAIN: (train_data, train_labels),
+            self.TEST: (test_data, test_labels)
+        }
+        self.num_features = train_data.shape[1]
+        self.num_labels = max(labels)+1
+
+    def get_batches(self, data_set):
+        """
+        Create batches of the input/labels.
+        """
+
+        if data_set in self._batches:
+            return self._batches[data_set]
+        if data_set not in self.data_sets:
+            raise IndexError('Data set #{} does not exist'.format(data_set))
+
+        with tf.name_scope('input'):
+            # Input data, pin to CPU because rest of pipeline is CPU-only
+            with tf.device('/cpu:0'):
+                inputs = tf.constant(self.data_sets[data_set][0])
+                labels = tf.constant(self.data_sets[data_set][1])
+
+                inputs, labels = tf.train.slice_input_producer([inputs, labels],
+                                                               num_epochs=self.args.num_epochs)
+                inputs, labels = tf.train.batch([inputs, labels],
+                                                batch_size=self.args.batch_size,
+                                                num_threads=self.args.num_threads,
+                                                allow_smaller_final_batch=True)
+
+        self._batches[data_set] = [inputs, labels]
+        return self._batches[data_set]
+
+    def clear_batches(self, data_set):
+        """
+        Remove cached batches.
+        """
+
+        if data_set in self._batches:
+            del self._batches[data_set]
+
+class Classification(object):
+    """
+    Classification of sprint features.
+    """
+
+    def __init__(self, args):
+        self.args = args
+
+
+    def run_session(self, model, test_op, data_sets):
+        """
+        Perform the training epoch runs.
+        """
+
+        with tf.Session() as sess:
+            # Create the op for initializing variables.
+            init_op = tf.group(tf.global_variables_initializer(),
+                               tf.local_variables_initializer())
+
+            sess.run(init_op)
+
+            run_class = model.RUNNER
+            runner = run_class(sess, model, self.args.train_directory, test_op)
+            runner.run(data_sets)
 
     def main(self, _):
         """
         Main entry point.
         """
 
+        logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s',
+                            level=getattr(logging, self.args.log.upper(), None))
+
         if self.args.seed is not None:
             random.seed(self.args.seed)
             np.random.seed(self.args.seed)
 
-        train_data, train_labels, test_data, test_labels, num_labels = \
-            self.get_datasets()
+        data_sets = Dataset(self.args)
 
         # Tell TensorFlow that the model will be built into the default Graph.
         with tf.Graph().as_default():
@@ -455,21 +576,22 @@ class Classification(object):
                 tf.set_random_seed(self.args.seed)
 
             # Create the training batches, network, and training ops.
-            inputs, labels = self.create_batches(train_data, train_labels)
-            num_features = train_data.shape[1]
+            inputs, labels = data_sets.get_batches(data_sets.TRAIN)
 
             model_class = Model.get_model(self.args.model)
             model = model_class(self.args, [inputs.dtype, labels.dtype],
-                                [num_features, num_labels])
+                                [data_sets.num_features, data_sets.num_labels])
             model.build()
 
             # Create the testing batches and test ops.
-            test_inputs, test_y = self.create_batches(test_data, test_labels)
-            correct = tf.equal(tf.argmax(model.outputs, 1), test_y)
-            accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
+            if model.outputs is not None:
+                test_y = data_sets.get_batches(data_sets.TEST)[1]
+                correct = tf.equal(tf.argmax(model.outputs, 1), test_y)
+                accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
+            else:
+                accuracy = None
 
-            self.run_session(model, accuracy,
-                             [inputs, labels, test_inputs, test_y])
+            self.run_session(model, accuracy, data_sets)
 
 def bootstrap():
     """
