@@ -80,12 +80,27 @@ class Dataset(object):
 
         full_data = np.array([[cell for cell in row] for row in data],
                              dtype=np.float32)
+
         indexes, labels = self._select_data(full_data, meta)
 
+        project_splits = np.argwhere(np.diff(full_data[:, 0]))[0] + 1
         dataset = np.nan_to_num(full_data[:, tuple(indexes)])
         names = [name for index, name in enumerate(meta) if index in indexes]
 
         logging.debug('Leftover column names: %r', names)
+
+        if self.args.roll_sprints:
+            # Roll the sprints such that a sprint has features from the sprint
+            # before it, while the labels remain the same for that sprint.
+            # Remove the sprint at the start of a project in lack of features.
+            logging.debug('Project splits: %r', project_splits)
+            projects = np.split(dataset, project_splits)
+            dataset = np.vstack([np.roll(p, 1, axis=0)[1:] for p in projects])
+
+            split_mask = np.ones(len(labels), np.bool)
+            split_mask[0] = False
+            split_mask[project_splits] = False
+            labels = labels[split_mask]
 
         train_data, test_data, train_labels, test_labels = \
             train_test_split(dataset, labels, test_size=self.args.test_size)
