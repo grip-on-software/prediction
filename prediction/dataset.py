@@ -68,6 +68,29 @@ class Dataset(object):
         logging.debug('Leftover indices: %r', indexes)
         return indexes, labels
 
+    @classmethod
+    def _last_sprint_weather(cls, labels, project_splits):
+        project_labels = np.split(labels, project_splits)
+        return np.hstack([
+            np.hstack([np.nan, np.roll(pl, 1, axis=0)[1:]]) for pl in project_labels
+        ])
+
+    @classmethod
+    def _last_sprint_weather_accuracy(cls, labels, project_splits=None,
+                                      weather=None, name='data'):
+        if weather is None:
+            weather = cls._last_sprint_weather(labels, project_splits)
+
+        num_correct = np.count_nonzero(np.equal(labels, weather))
+        if project_splits is None:
+            num_unclassifiable = 0
+        else:
+            num_unclassifiable = len(project_splits)
+
+        accuracy = (num_correct - num_unclassifiable) / float(len(labels))
+        logging.info('Last sprint weather accuracy (%s): %.2f', name, accuracy)
+        return weather, num_correct, accuracy
+
     def load_datasets(self):
         """
         Load the dataset and split into train/test, and inputs/labels.
@@ -83,12 +106,14 @@ class Dataset(object):
 
         indexes, labels = self._select_data(full_data, meta)
 
-        project_splits = np.argwhere(np.diff(full_data[:, 0]))[0] + 1
+        project_splits = np.squeeze(np.argwhere(np.diff(full_data[:, 0]) != 0) + 1)
         dataset = np.nan_to_num(full_data[:, tuple(indexes)])
         names = [name for index, name in enumerate(meta) if index in indexes]
 
         logging.debug('Leftover column names: %r', names)
 
+        weather = self._last_sprint_weather_accuracy(labels, project_splits,
+                                                     name='full dataset')[0]
         if self.args.roll_sprints:
             # Roll the sprints such that a sprint has features from the sprint
             # before it, while the labels remain the same for that sprint.
@@ -101,9 +126,17 @@ class Dataset(object):
             split_mask[0] = False
             split_mask[project_splits] = False
             labels = labels[split_mask]
+            weather = weather[split_mask]
 
-        train_data, test_data, train_labels, test_labels = \
-            train_test_split(dataset, labels, test_size=self.args.test_size)
+        train_data, test_data, train_labels, test_labels, train_weather, test_weather = \
+            train_test_split(dataset, labels, weather,
+                             test_size=self.args.test_size,
+                             stratify=labels)
+
+        self._last_sprint_weather_accuracy(train_labels, weather=train_weather,
+                                           name='training set')
+        self._last_sprint_weather_accuracy(test_labels, weather=test_weather,
+                                           name='test set')
 
         self.data_sets = {
             self.TRAIN: (train_data, train_labels),
