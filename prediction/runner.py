@@ -85,7 +85,7 @@ class TFRunner(Runner):
                     test_feed = {x_input: test_input, y_labels: test_label}
                     accuracy = self._session.run(self._test_op,
                                                  feed_dict=test_feed)
-                    logging.info("test accuracy: %f", accuracy)
+                    logging.info("test accuracy: %.2f", accuracy)
 
                     logging.info("saving training state")
                     saver.save(self._session, self.args.train_directory,
@@ -105,7 +105,7 @@ class TFRunner(Runner):
         self._summary_writer.add_summary(summary_str, step)
 
         accuracy = self._session.run(self._test_op, feed_dict=batch_feed)
-        logging.info("train accuracy: %f", accuracy)
+        logging.info("train accuracy: %.2f", accuracy)
 
 class TFLearnRunner(Runner):
     """
