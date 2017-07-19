@@ -133,6 +133,15 @@ class MultiLayerPerceptron(Model):
 
     RUNNER = TFRunner
 
+    def __init__(self, args, dtypes, sizes):
+        super(MultiLayerPerceptron, self).__init__(args, dtypes, sizes)
+        self.weights1 = None
+        self.biases1 = None
+        self.weights2 = None
+        self.biases2 = None
+        self.weights_max = None
+        self.biases_max = None
+
     @classmethod
     def add_arguments(cls, parser):
         group = parser.add_argument_group('MLP', 'Multi-layered perceptron')
@@ -140,9 +149,12 @@ class MultiLayerPerceptron(Model):
                            default=128, help='Number of units in hidden layer 1')
         group.add_argument('--num-hidden2', dest='num_hidden2', type=int,
                            default=32, help='Number of units in hidden layer 2')
+        group.add_argument('--activation',
+                           choices=['softmax', 'sigmoid', 'sigmax', 'onehot'],
+                           default='softmax', help='Activation of final layer')
 
     @staticmethod
-    def make_layer(name, inputs, num_visible, num_hidden):
+    def make_layer(name, inputs, num_visible, num_hidden, activation=True):
         """
         Make a layer with weights and biases based on the input shapes.
         """
@@ -152,26 +164,46 @@ class MultiLayerPerceptron(Model):
             weights = tf.Variable(tf.truncated_normal([num_visible, num_hidden],
                                                       stddev=stddev),
                                   name='weights')
-            biases = tf.Variable(tf.zeros([num_hidden]), name='biases')
-            layer = tf.nn.relu(tf.matmul(inputs, weights) + biases)
+            biases = tf.Variable(tf.random_normal([num_hidden]), name='biases')
+            layer = tf.add(tf.matmul(inputs, weights), biases)
+            if activation:
+                layer = tf.nn.relu(layer)
 
-        return layer
+        return layer, weights, biases
 
     def build(self):
-        num_hidden1 = self.args.num_hidden1
-        num_hidden2 = self.args.num_hidden2
+        hidden1, self.weights1, self.biases1 = \
+            self.make_layer('hidden1', self.x_input, self.num_features,
+                            self.args.num_hidden1)
+        hidden2, self.weights2, self.biases2 = \
+            self.make_layer('hidden2', hidden1, self.args.num_hidden1,
+                            self.args.num_hidden2)
+        outputs, self.weights_max, self.biases_max = \
+            self.make_layer('softmax_linear', hidden2, self.args.num_hidden2,
+                            self.num_labels, activation=False)
 
-        hidden1 = self.make_layer('hidden1', self.x_input, self.num_features,
-                                  num_hidden1)
-        hidden2 = self.make_layer('hidden2', hidden1, num_hidden1, num_hidden2)
-        self._outputs = self.make_layer('softmax_linear', hidden2, num_hidden2,
-                                        self.num_labels)
+        entropy_funcs = {
+            'softmax': tf.nn.sparse_softmax_cross_entropy_with_logits,
+            'onehot': tf.nn.sparse_softmax_cross_entropy_with_logits,
+            'sigmoid': tf.nn.sigmoid_cross_entropy_with_logits,
+            'sigmax': tf.nn.sigmoid_cross_entropy_with_logits
+        }
+        entropy_func = entropy_funcs[self.args.activation]
 
-        loss = tf.reduce_mean(
-            tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y_labels,
-                                                           logits=self.outputs,
-                                                           name='xentropy'),
-            name='xentropy_mean')
+        loss = tf.reduce_mean(entropy_func(labels=self.y_labels,
+                                           logits=outputs,
+                                           name='xentropy'),
+                              name='xentropy_mean')
+
+        if self.args.activation == 'onehot':
+            self._outputs = tf.one_hot(self.y_labels, self.num_labels)
+        elif self.args.activation == 'sigmoid':
+            self._outputs = tf.sigmoid(outputs)
+        elif self.args.activation == 'sigmax':
+            self._outputs = tf.cast(tf.greater(tf.sigmoid(outputs), 0.5),
+                                    'float')
+        else:
+            self._outputs = outputs
 
         self._train_ops.append(self.make_training(loss))
         self._train_ops.append(loss)
@@ -208,7 +240,7 @@ class DNNModel(LearnModel):
 
     @classmethod
     def add_arguments(cls, parser):
-        group = parser.add_argument_group('MLP', 'Multi-layered perceptron')
+        group = parser.add_argument_group('DNN', 'Deep neural network')
         group.add_argument('--hiddens', nargs='+', type=int,
                            default=[100, 150, 100],
                            help='Number of units per hidden layer')

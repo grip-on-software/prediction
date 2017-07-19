@@ -78,7 +78,7 @@ class Classification(object):
         self.args = args
 
 
-    def run_session(self, model, test_op, data_sets):
+    def run_session(self, model, test_ops, data_sets):
         """
         Perform the training epoch runs.
         """
@@ -91,7 +91,7 @@ class Classification(object):
             sess.run(init_op)
 
             run_class = model.RUNNER
-            runner = run_class(self.args, sess, model, test_op)
+            runner = run_class(self.args, sess, model, test_ops)
             runner.run(data_sets)
 
     def main(self, _):
@@ -126,14 +126,16 @@ class Classification(object):
             model.build()
 
             # Create the testing batches and test ops.
+            data_sets.get_batches(data_sets.TEST)
             if model.outputs is not None:
-                test_y = data_sets.get_batches(data_sets.TEST)[1]
-                correct = tf.equal(tf.argmax(model.outputs, 1), test_y)
+                pred = tf.argmax(model.outputs, 1)
+                correct = tf.equal(pred, model.y_labels)
                 accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
             else:
                 accuracy = None
+                pred = None
 
-            self.run_session(model, accuracy, data_sets)
+            self.run_session(model, [accuracy, pred], data_sets)
 
 def bootstrap():
     """
