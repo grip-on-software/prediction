@@ -7,6 +7,7 @@ import tensorflow as tf
 from scipy.io import arff
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 
 class Dataset(object):
     """
@@ -108,6 +109,7 @@ class Dataset(object):
 
         project_splits = np.squeeze(np.argwhere(np.diff(full_data[:, 0]) != 0) + 1)
         dataset = np.nan_to_num(full_data[:, tuple(indexes)])
+
         names = [name for index, name in enumerate(meta) if index in indexes]
 
         logging.debug('Leftover column names: %r', names)
@@ -138,6 +140,11 @@ class Dataset(object):
         self._last_sprint_weather_accuracy(test_labels, weather=test_weather,
                                            name='test set')
 
+        scaler = MinMaxScaler((0, 1), copy=True)
+        scaler.fit(train_data)
+        train_data = scaler.transform(train_data)
+        test_data = scaler.transform(test_data)
+
         self.data_sets = {
             self.TRAIN: (train_data, train_labels),
             self.TEST: (test_data, test_labels)
@@ -147,7 +154,8 @@ class Dataset(object):
 
     def get_batches(self, data_set):
         """
-        Create batches of the input/labels.
+        Create batches of the input/labels. This must be called at least once
+        before a graph is set up, otherwise the batching will stall.
         """
 
         if data_set in self._batches:
