@@ -55,6 +55,11 @@ def get_parser():
                         action='store_true', help='Use features of previous sprints')
     parser.add_argument('--roll-labels', dest='roll_labels', default=False,
                         action='store_true', help='Use labels of previous sprints')
+    parser.add_argument('--weighted', default=False, action='store_true',
+                        help='Model can use class weights for balancing')
+    parser.add_argument('--stratified-sample', dest='stratified_sample',
+                        default=False, action='store_true',
+                        help='Create proportionally balanced batches')
     parser.add_argument('--seed', type=int, default=None, nargs='?', const=0,
                         help='Set a predefined random seed')
     parser.add_argument('--log', default='WARNING',
@@ -120,10 +125,11 @@ class Classification(object):
                 tf.set_random_seed(self.args.seed)
 
             # Create the training batches, network, and training ops.
-            inputs, labels = data_sets.get_batches(data_sets.TRAIN)
+            inputs, labels, weights = data_sets.get_batches(data_sets.TRAIN)
 
             model_class = Model.get_model(self.args.model)
-            model = model_class(self.args, [inputs.dtype, labels.dtype],
+            model = model_class(self.args,
+                                [inputs.dtype, labels.dtype, weights.dtype],
                                 [data_sets.num_features, data_sets.num_labels])
             model.build()
 

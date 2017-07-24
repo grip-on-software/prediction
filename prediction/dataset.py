@@ -136,6 +136,19 @@ class Dataset(object):
 
         return train_data, test_data
 
+    @staticmethod
+    def _weight_classes(train_labels, test_labels):
+        # Provide rebalancing weights.
+        counts = np.bincount(train_labels)
+        ratios = (counts / float(len(train_labels))).astype(np.float32)
+        logging.debug('Ratios: %r', ratios)
+
+        #label_weights = tf.transpose(tf.matmul(train_labels,
+        #                                       tf.transpose(ratios)))
+        train_weights = np.choose(train_labels, ratios)
+        test_weights = np.choose(test_labels, ratios)
+        return train_weights, test_weights, ratios
+
     def load_datasets(self):
         """
         Load the dataset and split into train/test, and inputs/labels.
@@ -166,10 +179,12 @@ class Dataset(object):
                                            name='test set')
 
         train_data, test_data = self._scale(train_data, test_data)
+        train_weights, test_weights, self.ratios = \
+            self._weight_classes(train_labels, test_labels)
 
         self.data_sets = {
-            self.TRAIN: (train_data, train_labels),
-            self.TEST: (test_data, test_labels)
+            self.TRAIN: (train_data, train_labels, train_weights),
+            self.TEST: (test_data, test_labels, test_weights)
         }
         self.num_features = train_data.shape[1]
         self.num_labels = max(labels)+1
@@ -188,17 +203,37 @@ class Dataset(object):
         with tf.name_scope('input'):
             # Input data, pin to CPU because rest of pipeline is CPU-only
             with tf.device('/cpu:0'):
-                inputs = tf.constant(self.data_sets[data_set][0])
-                labels = tf.constant(self.data_sets[data_set][1])
+                inputs, labels, weights = [
+                    tf.constant(item) for item in self.data_sets[data_set]
+                ]
 
-                inputs, labels = tf.train.slice_input_producer([inputs, labels],
-                                                               num_epochs=self.args.num_epochs)
-                inputs, labels = tf.train.batch([inputs, labels],
-                                                batch_size=self.args.batch_size,
-                                                num_threads=self.args.num_threads,
-                                                allow_smaller_final_batch=True)
+                inputs, labels, weights = \
+                    tf.train.slice_input_producer([inputs, labels, weights],
+                                                  num_epochs=self.args.num_epochs)
 
-        self._batches[data_set] = [inputs, labels]
+                if self.args.stratified_sample:
+                    target_prob = [
+                        1/float(self.num_labels) for _ in range(self.num_labels)
+                    ]
+                    kwargs = {
+                        'init_probs': self.ratios,
+                        'threads_per_queue': self.args.num_threads
+                    }
+                    tensors, labels = \
+                        tf.contrib.training.stratified_sample([inputs, weights],
+                                                              labels,
+                                                              target_prob,
+                                                              self.args.batch_size,
+                                                              **kwargs)
+                    inputs, weights = tensors[0]
+                else:
+                    inputs, labels, weights = \
+                        tf.train.batch([inputs, labels, weights],
+                                       batch_size=self.args.batch_size,
+                                       num_threads=self.args.num_threads,
+                                       allow_smaller_final_batch=True)
+
+        self._batches[data_set] = [inputs, labels, weights]
         return self._batches[data_set]
 
     def clear_batches(self, data_set):

@@ -58,27 +58,28 @@ class TFRunner(Runner):
     Runner for pure TensorFlow models.
     """
 
-    def _build_feed(self, inputs, labels):
-        batch_inputs, batch_labels = self._session.run([inputs, labels])
+    def _build_feed(self, batch_ops):
+        batch_inputs, batch_labels, batch_weights = self._session.run(batch_ops)
 
         return {
             self._model.x_input: batch_inputs,
-            self._model.y_labels: batch_labels
+            self._model.y_labels: batch_labels,
+            self._model.y_weights: batch_weights
         }
 
     def loop(self, datasets):
         # Create a saver for writing training checkpoints.
         saver = tf.train.Saver()
 
-        inputs, labels = datasets.get_batches(datasets.TRAIN)
-        test_inputs, test_labels = datasets.get_batches(datasets.TEST)
+        train_batch_ops = datasets.get_batches(datasets.TRAIN)
+        test_batch_ops = datasets.get_batches(datasets.TEST)
 
         try:
             step = 0
             while not self._coordinator.should_stop():
                 start_time = time.time()
 
-                batch_feed = self._build_feed(inputs, labels)
+                batch_feed = self._build_feed(train_batch_ops)
                 train_values = self._session.run(self._model.train_ops,
                                                  feed_dict=batch_feed)
 
@@ -89,7 +90,7 @@ class TFRunner(Runner):
                                          duration)
 
                 if step % self.args.test_interval == 0:
-                    test_feed = self._build_feed(test_inputs, test_labels)
+                    test_feed = self._build_feed(test_batch_ops)
                     self._test_progress(saver, step, test_feed)
 
                 step = step + 1
@@ -148,16 +149,22 @@ class TFLearnRunner(Runner):
     Runner for TensorFlow Learn models.
     """
 
+    def _get_input(self, datasets, data_set):
+        # Enforce new graph
+        datasets.clear_batches(data_set)
+        inputs, labels, weights = datasets.get_batches(data_set)
+        input_columns = {
+            self._model.INPUT_COLUMN: inputs,
+            self._model.WEIGHT_COLUMN: weights
+        }
+        return input_columns, tf.reshape(labels, shape=(-1, 1))
+
     def loop(self, datasets):
         def _get_train_input():
-            # Enforce new graph
-            datasets.clear_batches(datasets.TRAIN)
-            return datasets.get_batches(datasets.TRAIN)
+            return self._get_input(datasets, datasets.TRAIN)
 
         def _get_test_input():
-            # Enforce new graph
-            datasets.clear_batches(datasets.TEST)
-            return datasets.get_batches(datasets.TEST)
+            return self._get_input(datasets, datasets.TEST)
 
         monitor_class = tf.contrib.learn.monitors.ValidationMonitor
         monitor = monitor_class(input_fn=_get_test_input,

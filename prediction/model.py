@@ -62,10 +62,13 @@ class Model(object):
     def __init__(self, args, dtypes, sizes):
         self.args = args
         self._num_features, self._num_labels = sizes
-        input_dtype, label_dtype = dtypes
-        self._x_input = tf.placeholder(dtype=input_dtype,
-                                       shape=[None, self._num_features])
-        self._y_labels = tf.placeholder(dtype=label_dtype, shape=[None])
+        input_dtype, label_dtype, weight_dtype = dtypes
+        self._placeholders = {
+            'x_input': tf.placeholder(dtype=input_dtype,
+                                      shape=[None, self._num_features]),
+            'y_labels': tf.placeholder(dtype=label_dtype, shape=[None]),
+            'y_weights': tf.placeholder(dtype=weight_dtype, shape=[None])
+        }
 
         self._outputs = None
         self._train_ops = []
@@ -92,7 +95,7 @@ class Model(object):
         Retrieve the input placeholder variable.
         """
 
-        return self._x_input
+        return self._placeholders['x_input']
 
     @property
     def y_labels(self):
@@ -100,7 +103,15 @@ class Model(object):
         Retrieve the output placeholder variable.
         """
 
-        return self._y_labels
+        return self._placeholders['y_labels']
+
+    @property
+    def y_weights(self):
+        """
+        Retrieve the class weight ratio placeholder variable.
+        """
+
+        return self._placeholders['y_weights']
 
     @property
     def outputs(self):
@@ -183,20 +194,31 @@ class MultiLayerPerceptron(Model):
                             self.num_labels, activation=False)
 
         entropy_funcs = {
-            'softmax': tf.nn.sparse_softmax_cross_entropy_with_logits,
-            'onehot': tf.nn.sparse_softmax_cross_entropy_with_logits,
-            'sigmoid': tf.nn.sigmoid_cross_entropy_with_logits,
-            'sigmax': tf.nn.sigmoid_cross_entropy_with_logits
+            'softmax': tf.losses.sparse_softmax_cross_entropy,
+            'onehot': tf.losses.sparse_softmax_cross_entropy,
+            'sigmoid': tf.losses.sigmoid_cross_entropy,
+            'sigmax': tf.losses.sigmoid_cross_entropy
         }
         entropy_func = entropy_funcs[self.args.activation]
 
-        loss = tf.reduce_mean(entropy_func(labels=self.y_labels,
-                                           logits=outputs,
-                                           name='xentropy'),
+        onehot = tf.one_hot(self.y_labels, self.num_labels)
+        if self.args.activation in ('sigmoid', 'sigmax'):
+            labels = onehot
+            weights = tf.one_hot(self.y_labels, self.num_labels,
+                                 on_value=tf.reduce_max(self.y_weights),
+                                 off_value=tf.reduce_min(self.y_weights))
+        else:
+            labels = self.y_labels
+            weights = self.y_weights
+
+        if not self.args.weighted:
+            weights = 1
+
+        loss = tf.reduce_mean(entropy_func(labels, outputs, weights=weights),
                               name='xentropy_mean')
 
         if self.args.activation == 'onehot':
-            self._outputs = tf.one_hot(self.y_labels, self.num_labels)
+            self._outputs = onehot
         elif self.args.activation == 'sigmoid':
             self._outputs = tf.sigmoid(outputs)
         elif self.args.activation == 'sigmax':
@@ -216,6 +238,7 @@ class MultiLayerPerceptron(Model):
         tf.summary.scalar('loss', loss)
         global_step = tf.Variable(0, name='global_step', trainable=False)
         optimizer = tf.train.GradientDescentOptimizer(self.args.learning_rate)
+        #optimizer = tf.train.AdamOptimizer(self.args.learning_rate)
         return optimizer.minimize(loss, global_step=global_step)
 
 class LearnModel(Model):
@@ -225,9 +248,19 @@ class LearnModel(Model):
 
     RUNNER = TFLearnRunner
 
+    INPUT_COLUMN = "x"
+    WEIGHT_COLUMN = "weight"
+
     def __init__(self, args, dtypes, sizes):
         super(LearnModel, self).__init__(args, dtypes, sizes)
         self.predictor = None
+        self.columns = [
+            tf.contrib.layers.real_valued_column(self.INPUT_COLUMN,
+                                                 dimension=self.num_features,
+                                                 dtype=self.x_input.dtype),
+            tf.contrib.layers.real_valued_column(self.WEIGHT_COLUMN,
+                                                 dtype=self.y_weights.dtype)
+        ]
 
     def build(self):
         raise NotImplementedError('Must be implemented by subclasses')
@@ -246,19 +279,21 @@ class DNNModel(LearnModel):
                            help='Number of units per hidden layer')
 
     def build(self):
-        columns = [
-            tf.contrib.layers.real_valued_column("",
-                                                 dimension=self.num_features,
-                                                 dtype=self.x_input.dtype)
-        ]
 
         run_config = tf.contrib.learn.RunConfig(save_checkpoints_secs=1,
                                                 model_dir=self.args.train_directory)
 
-        self.predictor = tf.contrib.learn.DNNClassifier(hidden_units=self.args.hiddens,
-                                                        feature_columns=columns,
-                                                        n_classes=self.num_labels,
-                                                        config=run_config)
+        if self.args.weighted:
+            weight_column = self.WEIGHT_COLUMN
+        else:
+            weight_column = None
+
+        self.predictor = \
+            tf.contrib.learn.DNNClassifier(hidden_units=self.args.hiddens,
+                                           feature_columns=self.columns,
+                                           n_classes=self.num_labels,
+                                           weight_column_name=weight_column,
+                                           config=run_config)
 
 @Model.register('dbn')
 class DBNModel(LearnModel):
