@@ -46,6 +46,17 @@ class Dataset(object):
 
         return labels, label_index
 
+    def _load(self):
+        with open(self.args.filename) as features_file:
+            data, meta = arff.loadarff(features_file)
+
+        logging.debug('Metadata:\n%r', meta)
+
+        full_data = np.array([[cell for cell in row] for row in data],
+                             dtype=np.float32)
+
+        return full_data, meta
+
     def _select_data(self, full_data, meta):
         name_translation = dict(zip(meta.names(), range(full_data.shape[1])))
 
@@ -66,8 +77,12 @@ class Dataset(object):
         else:
             labels = np.random.randint(0, 1+1, size=(full_data.shape[0],))
 
+        names = [name for index, name in enumerate(meta) if index in indexes]
         logging.debug('Leftover indices: %r', indexes)
-        return indexes, labels
+        logging.debug('Leftover column names: %r', names)
+
+        dataset = np.nan_to_num(full_data[:, tuple(indexes)])
+        return dataset, labels
 
     @classmethod
     def _last_sprint_weather(cls, labels, project_splits):
@@ -92,43 +107,53 @@ class Dataset(object):
         logging.info('Last sprint weather accuracy (%s): %.2f', name, accuracy)
         return weather, num_correct, accuracy
 
+    def _roll_sprints(self, project_splits, dataset, labels, weather):
+        # Roll the sprints such that a sprint has features from the sprint
+        # before it, while the labels remain the same for that sprint.
+        # Remove the sprint at the start of a project in lack of features.
+        logging.debug('Project splits: %r', project_splits)
+        if self.args.roll_labels:
+            dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
+        projects = np.split(dataset, project_splits)
+        dataset = np.vstack([np.roll(p, 1, axis=0)[1:] for p in projects])
+
+        split_mask = np.ones(len(labels), np.bool)
+        split_mask[0] = False
+        split_mask[project_splits] = False
+        labels = labels[split_mask]
+        weather = weather[split_mask]
+
+        return dataset, labels, weather
+
+    @staticmethod
+    def _scale(train_data, test_data):
+        # Scale the data to an appropriate normalized scale [0, 1) suitable for
+        # training in normally weighted neural networks.
+        scaler = MinMaxScaler((0, 1), copy=True)
+        scaler.fit(train_data)
+        train_data = scaler.transform(train_data)
+        test_data = scaler.transform(test_data)
+
+        return train_data, test_data
+
     def load_datasets(self):
         """
         Load the dataset and split into train/test, and inputs/labels.
         """
 
-        with open(self.args.filename) as features_file:
-            data, meta = arff.loadarff(features_file)
+        full_data, meta = self._load()
 
-        logging.debug('Metadata:\n%r', meta)
-
-        full_data = np.array([[cell for cell in row] for row in data],
-                             dtype=np.float32)
-
-        indexes, labels = self._select_data(full_data, meta)
+        dataset, labels = self._select_data(full_data, meta)
 
         project_splits = np.squeeze(np.argwhere(np.diff(full_data[:, 0]) != 0) + 1)
-        dataset = np.nan_to_num(full_data[:, tuple(indexes)])
-
-        names = [name for index, name in enumerate(meta) if index in indexes]
-
-        logging.debug('Leftover column names: %r', names)
 
         weather = self._last_sprint_weather_accuracy(labels, project_splits,
                                                      name='full dataset')[0]
-        if self.args.roll_sprints:
-            # Roll the sprints such that a sprint has features from the sprint
-            # before it, while the labels remain the same for that sprint.
-            # Remove the sprint at the start of a project in lack of features.
-            logging.debug('Project splits: %r', project_splits)
-            projects = np.split(dataset, project_splits)
-            dataset = np.vstack([np.roll(p, 1, axis=0)[1:] for p in projects])
 
-            split_mask = np.ones(len(labels), np.bool)
-            split_mask[0] = False
-            split_mask[project_splits] = False
-            labels = labels[split_mask]
-            weather = weather[split_mask]
+        if self.args.roll_sprints:
+            dataset, labels, weather = self._roll_sprints(project_splits,
+                                                          dataset, labels,
+                                                          weather)
 
         train_data, test_data, train_labels, test_labels, train_weather, test_weather = \
             train_test_split(dataset, labels, weather,
@@ -140,10 +165,7 @@ class Dataset(object):
         self._last_sprint_weather_accuracy(test_labels, weather=test_weather,
                                            name='test set')
 
-        scaler = MinMaxScaler((0, 1), copy=True)
-        scaler.fit(train_data)
-        train_data = scaler.transform(train_data)
-        test_data = scaler.transform(test_data)
+        train_data, test_data = self._scale(train_data, test_data)
 
         self.data_sets = {
             self.TRAIN: (train_data, train_labels),

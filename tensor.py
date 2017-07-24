@@ -53,6 +53,8 @@ def get_parser():
                         default=0.20, help='Ratio of dataset to use for test')
     parser.add_argument('--roll-sprints', dest='roll_sprints', default=False,
                         action='store_true', help='Use features of previous sprints')
+    parser.add_argument('--roll-labels', dest='roll_labels', default=False,
+                        action='store_true', help='Use labels of previous sprints')
     parser.add_argument('--seed', type=int, default=None, nargs='?', const=0,
                         help='Set a predefined random seed')
     parser.add_argument('--log', default='WARNING',
