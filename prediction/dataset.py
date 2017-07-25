@@ -120,8 +120,9 @@ class Dataset(object):
         # Remove the sprint at the start of a project in lack of features.
         logging.debug('Project splits: %r', project_splits)
 
-        latest = dataset[project_splits, :]
-        latest_labels = labels[project_splits]
+        latest_indexes = np.hstack([project_splits-1, -1])
+        latest = dataset[latest_indexes, :]
+        latest_labels = labels[latest_indexes]
 
         if self.args.roll_labels:
             dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)

@@ -4,6 +4,7 @@ TensorFlow based prediction runners.
 
 import logging
 import time
+import numpy as np
 import sklearn.metrics
 import tensorflow as tf
 
@@ -49,6 +50,15 @@ class Runner(object):
         """
         Perform the internal loop of iterative training and test accuracy
         reporting.
+        """
+
+        raise NotImplementedError('Must be implemented by subclasses')
+
+    def evaluate(self, datasets):
+        """
+        Calculate labels for a validation set. If possible, any metrics about
+        this set may be reported as well. Returns the predicted labels for the
+        validation set as a numpy array.
         """
 
         raise NotImplementedError('Must be implemented by subclasses')
@@ -113,6 +123,12 @@ class TFRunner(Runner):
         logging.info("train accuracy: %.2f", accuracy)
 
     def _test_progress(self, saver, step, test_feed):
+        self._validate(test_feed)
+
+        logging.info("saving training state")
+        saver.save(self._session, self.args.train_directory, global_step=step)
+
+    def _validate(self, test_feed):
         test_label = test_feed[self._model.y_labels]
         accuracy, pred = self._session.run(self._test_ops, feed_dict=test_feed)
         logging.debug('Outputs: %r',
@@ -141,8 +157,20 @@ class TFRunner(Runner):
         logging.info("confusion:\n%r",
                      sklearn.metrics.confusion_matrix(test_label, pred))
 
-        logging.info("saving training state")
-        saver.save(self._session, self.args.train_directory, global_step=step)
+        return test_label
+
+    def evaluate(self, datasets):
+        validation_batch_ops = datasets.get_batches(datasets.VALIDATION)
+        stop = False
+        labels = []
+        while not stop:
+            try:
+                validation_batch = self._build_feed(validation_batch_ops)
+                labels.append(self._validate(validation_batch))
+            except tf.errors.OutOfRangeError:
+                stop = True
+
+        return np.hstack(labels)
 
 class TFLearnRunner(Runner):
     """
@@ -174,6 +202,13 @@ class TFLearnRunner(Runner):
                                   steps=self.args.num_epochs,
                                   monitors=[monitor])
 
+    def evaluate(self, datasets):
+        def _get_validation_input():
+            return self._get_input(datasets, datasets.VALIDATION)
+
+        return self._model.predictor.predict(input_fn=_get_validation_input,
+                                             as_iterable=False)
+
 class TFSKLRunner(Runner):
     """
     Runner for models implemented in TensorFlow but imitating scikit-learn.
@@ -185,4 +220,7 @@ class TFSKLRunner(Runner):
 
         self._model.predictor.fit(*datasets.data_sets[datasets.TRAIN])
 
-        # ...
+    def evaluate(self, datasets):
+        datasets.clear_batches(datasets.VALIDATION)
+        inputs = datasets.data_sets[datasets.VALIDATION][0]
+        return self._model.predictor.predict(inputs)

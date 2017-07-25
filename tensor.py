@@ -86,7 +86,6 @@ class Classification(object):
     def __init__(self, args):
         self.args = args
 
-
     def run_session(self, model, test_ops, data_sets):
         """
         Perform the training epoch runs.
@@ -101,7 +100,13 @@ class Classification(object):
 
             run_class = model.RUNNER
             runner = run_class(self.args, sess, model, test_ops)
-            runner.run(data_sets)
+            if self.args.train:
+                runner.run(data_sets)
+
+            predictions = runner.evaluate(data_sets)
+            logging.info('Predicted labels: %r', predictions)
+            logging.info('Actual labels: %r',
+                         data_sets.data_sets[data_sets.VALIDATION][1])
 
     def main(self, _):
         """
@@ -135,8 +140,11 @@ class Classification(object):
                                 [data_sets.num_features, data_sets.num_labels])
             model.build()
 
-            # Create the testing batches and test ops.
+            # Create the testing and validation batches and test ops.
+            # These batches must be created after the associated graph is
+            # created but before the session starts.
             data_sets.get_batches(data_sets.TEST)
+            data_sets.get_batches(data_sets.VALIDATION)
             if model.outputs is not None:
                 pred = tf.argmax(model.outputs, 1)
                 correct = tf.equal(pred, model.y_labels)
@@ -145,8 +153,7 @@ class Classification(object):
                 accuracy = None
                 pred = None
 
-            if self.args.train:
-                self.run_session(model, [accuracy, pred], data_sets)
+            self.run_session(model, [accuracy, pred], data_sets)
 
 def bootstrap():
     """
