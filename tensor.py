@@ -32,6 +32,8 @@ def get_parser():
                         help='Convert label to binary classifications')
     parser.add_argument('--train-directory', dest='train_directory',
                         default='/tmp/data', help='Output of training')
+    parser.add_argument('--no-train', default=True, action='store_false',
+                        dest='train', help='Skip training, use existing model')
     parser.add_argument('--clean', default=False, action='store_true',
                         help='Remove model files from train directory')
     parser.add_argument('--clean-patterns', nargs='*', dest='clean_patterns',
@@ -143,7 +145,8 @@ class Classification(object):
                 accuracy = None
                 pred = None
 
-            self.run_session(model, [accuracy, pred], data_sets)
+            if self.args.train:
+                self.run_session(model, [accuracy, pred], data_sets)
 
 def bootstrap():
     """

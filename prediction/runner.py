@@ -171,7 +171,7 @@ class TFLearnRunner(Runner):
                                 every_n_steps=self.args.test_interval)
 
         self._model.predictor.fit(input_fn=_get_train_input,
-                                  max_steps=self.args.num_epochs,
+                                  steps=self.args.num_epochs,
                                   monitors=[monitor])
 
 class TFSKLRunner(Runner):
