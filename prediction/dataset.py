@@ -16,6 +16,11 @@ class Dataset(object):
 
     TRAIN = 0
     TEST = 1
+    VALIDATION = 2
+
+    # Indexes in the original dataset of uniquely identifying keys
+    PROJECT_KEY = 0
+    SPRINT_KEY = 1
 
     def __init__(self, args):
         self.args = args
@@ -65,13 +70,13 @@ class Dataset(object):
         else:
             indexes = set(range(full_data.shape[1]))
 
-        indexes.remove(0)
+        indexes.discard(self.PROJECT_KEY)
         if self.args.remove:
             indexes -= set(self._translate(self.args.remove, name_translation))
 
         if self.args.label:
             labels, label_index = self._get_labels(full_data, name_translation)
-            indexes.remove(label_index)
+            indexes.discard(label_index)
 
             logging.debug('Selected label %d: %r', label_index, labels)
         else:
@@ -82,7 +87,9 @@ class Dataset(object):
         logging.debug('Leftover column names: %r', names)
 
         dataset = np.nan_to_num(full_data[:, tuple(indexes)])
-        return dataset, labels
+        projects = full_data[:, self.PROJECT_KEY]
+        project_splits = np.squeeze(np.argwhere(np.diff(projects) != 0) + 1)
+        return dataset, labels, project_splits
 
     @classmethod
     def _last_sprint_weather(cls, labels, project_splits):
@@ -112,8 +119,13 @@ class Dataset(object):
         # before it, while the labels remain the same for that sprint.
         # Remove the sprint at the start of a project in lack of features.
         logging.debug('Project splits: %r', project_splits)
+
+        latest = dataset[project_splits, :]
+        latest_labels = labels[project_splits]
+
         if self.args.roll_labels:
             dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
+
         projects = np.split(dataset, project_splits)
         dataset = np.vstack([np.roll(p, 1, axis=0)[1:] for p in projects])
 
@@ -123,7 +135,7 @@ class Dataset(object):
         labels = labels[split_mask]
         weather = weather[split_mask]
 
-        return dataset, labels, weather
+        return dataset, labels, weather, latest, latest_labels
 
     @staticmethod
     def _scale(train_data, test_data):
@@ -137,36 +149,32 @@ class Dataset(object):
         return train_data, test_data
 
     @staticmethod
-    def _weight_classes(train_labels, test_labels):
+    def _weight_classes(labels):
         # Provide rebalancing weights.
+        train_labels = labels[0]
         counts = np.bincount(train_labels)
         ratios = (counts / float(len(train_labels))).astype(np.float32)
         logging.debug('Ratios: %r', ratios)
 
-        #label_weights = tf.transpose(tf.matmul(train_labels,
-        #                                       tf.transpose(ratios)))
-        train_weights = np.choose(train_labels, ratios)
-        test_weights = np.choose(test_labels, ratios)
-        return train_weights, test_weights, ratios
+        weights = [np.choose(set_labels, ratios) for set_labels in labels]
+        return weights, ratios
 
     def load_datasets(self):
         """
         Load the dataset and split into train/test, and inputs/labels.
         """
 
-        full_data, meta = self._load()
-
-        dataset, labels = self._select_data(full_data, meta)
-
-        project_splits = np.squeeze(np.argwhere(np.diff(full_data[:, 0]) != 0) + 1)
+        dataset, labels, project_splits = self._select_data(*self._load())
 
         weather = self._last_sprint_weather_accuracy(labels, project_splits,
                                                      name='full dataset')[0]
 
         if self.args.roll_sprints:
-            dataset, labels, weather = self._roll_sprints(project_splits,
-                                                          dataset, labels,
-                                                          weather)
+            dataset, labels, weather, validation_data, validation_labels = \
+                self._roll_sprints(project_splits, dataset, labels, weather)
+        else:
+            validation_data = np.empty(0)
+            validation_labels = np.empty(0)
 
         train_data, test_data, train_labels, test_labels, train_weather, test_weather = \
             train_test_split(dataset, labels, weather,
@@ -179,12 +187,14 @@ class Dataset(object):
                                            name='test set')
 
         train_data, test_data = self._scale(train_data, test_data)
-        train_weights, test_weights, self.ratios = \
-            self._weight_classes(train_labels, test_labels)
+        weights, self.ratios = \
+            self._weight_classes([train_labels, test_labels, validation_labels])
 
         self.data_sets = {
-            self.TRAIN: (train_data, train_labels, train_weights),
-            self.TEST: (test_data, test_labels, test_weights)
+            self.TRAIN: (train_data, train_labels, weights[self.TRAIN]),
+            self.TEST: (test_data, test_labels, weights[self.TEST]),
+            self.VALIDATION:
+                (validation_data, validation_labels, weights[self.VALIDATION])
         }
         self.num_features = train_data.shape[1]
         self.num_labels = max(labels)+1
