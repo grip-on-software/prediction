@@ -137,11 +137,19 @@ class Dataset(object):
             dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
 
         projects = np.split(dataset, project_splits)
-        dataset = np.vstack([np.roll(p, 1, axis=0)[1:] for p in projects])
+        end_index = -1 if self.args.roll_validation else None
+        rolled_projects = [np.roll(p, 1, axis=0)[1:end_index] for p in projects]
+        dataset = np.vstack(rolled_projects)
 
         split_mask = np.ones(len(labels), np.bool)
         split_mask[0] = False
         split_mask[project_splits] = False
+        if self.args.roll_validation:
+            split_mask[project_splits-1] = False
+            split_mask[-1] = False
+            # Reobtain validation inputs after the roll is completed
+            latest = dataset[latest_indexes, :]
+
         labels = labels[split_mask]
         weather = weather[split_mask]
 

@@ -60,6 +60,9 @@ def get_parser():
                         action='store_true', help='Use features of previous sprints')
     parser.add_argument('--roll-labels', dest='roll_labels', default=False,
                         action='store_true', help='Use labels of previous sprints')
+    parser.add_argument('--roll-validation', dest='roll_validation',
+                        default=False, action='store_true',
+                        help='Use previous features in validation set, shrink train/test')
     parser.add_argument('--weighted', default=False, action='store_true',
                         help='Model can use class weights for balancing')
     parser.add_argument('--stratified-sample', dest='stratified_sample',
