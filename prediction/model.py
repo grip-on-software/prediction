@@ -257,10 +257,13 @@ class LearnModel(Model):
         self.columns = [
             tf.contrib.layers.real_valued_column(self.INPUT_COLUMN,
                                                  dimension=self.num_features,
-                                                 dtype=self.x_input.dtype),
-            tf.contrib.layers.real_valued_column(self.WEIGHT_COLUMN,
-                                                 dtype=self.y_weights.dtype)
+                                                 dtype=self.x_input.dtype)
         ]
+        if self.args.weighted:
+            self.columns.extend([
+                tf.contrib.layers.real_valued_column(self.WEIGHT_COLUMN,
+                                                     dtype=self.y_weights.dtype)
+            ])
 
     def build(self):
         raise NotImplementedError('Must be implemented by subclasses')
@@ -279,7 +282,6 @@ class DNNModel(LearnModel):
                            help='Number of units per hidden layer')
 
     def build(self):
-
         run_config = tf.contrib.learn.RunConfig(save_checkpoints_secs=1,
                                                 model_dir=self.args.train_directory)
 

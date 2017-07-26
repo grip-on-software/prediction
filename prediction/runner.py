@@ -57,8 +57,10 @@ class Runner(object):
     def evaluate(self, datasets):
         """
         Calculate labels for a validation set. If possible, any metrics about
-        this set may be reported as well. Returns the predicted labels for the
-        validation set as a numpy array.
+        this set may be reported as well. Returns a dictionary containing the
+        predicted labels in "labels" for the validation set and any additional
+        metrics such as probabilities and accuracy. Values may be numpy arrays
+        or serializable values.
         """
 
         raise NotImplementedError('Must be implemented by subclasses')
@@ -170,7 +172,9 @@ class TFRunner(Runner):
             except tf.errors.OutOfRangeError:
                 stop = True
 
-        return np.hstack(labels)
+        return {
+            "labels": np.hstack(labels)
+        }
 
 class TFLearnRunner(Runner):
     """
@@ -206,8 +210,15 @@ class TFLearnRunner(Runner):
         def _get_validation_input():
             return self._get_input(datasets, datasets.VALIDATION)
 
-        return self._model.predictor.predict(input_fn=_get_validation_input,
-                                             as_iterable=False)
+        probabilities = \
+            self._model.predictor.predict_proba(input_fn=_get_validation_input,
+                                                as_iterable=False)
+
+        classes = np.argmax(probabilities, axis=1)
+        return {
+            "labels": classes,
+            "probabilities": np.choose(classes, probabilities.transpose())
+        }
 
 class TFSKLRunner(Runner):
     """
@@ -218,9 +229,13 @@ class TFSKLRunner(Runner):
         datasets.clear_batches(datasets.TRAIN)
         datasets.clear_batches(datasets.TEST)
 
-        self._model.predictor.fit(*datasets.data_sets[datasets.TRAIN])
+        train_data = datasets.data_sets[datasets.TRAIN][datasets.INPUTS]
+        train_labels = datasets.data_sets[datasets.TRAIN][datasets.LABELS]
+        self._model.predictor.fit(train_data, train_labels)
 
     def evaluate(self, datasets):
         datasets.clear_batches(datasets.VALIDATION)
         inputs = datasets.data_sets[datasets.VALIDATION][0]
-        return self._model.predictor.predict(inputs)
+        return {
+            "labels": self._model.predictor.predict(inputs)
+        }

@@ -4,6 +4,7 @@ Tensorflow for sprint features.
 
 from __future__ import print_function
 import argparse
+import json
 import logging
 import random
 import sys
@@ -32,6 +33,8 @@ def get_parser():
                         help='Convert label to binary classifications')
     parser.add_argument('--train-directory', dest='train_directory',
                         default='/tmp/data', help='Output of training')
+    parser.add_argument('--results', default='sprint_labels.json',
+                        help='Filename to output JSON results to')
     parser.add_argument('--no-train', default=True, action='store_false',
                         dest='train', help='Skip training, use existing model')
     parser.add_argument('--clean', default=False, action='store_true',
@@ -78,6 +81,17 @@ def get_parser():
 
     return parser
 
+def serialize_json(obj):
+    """
+    Serialize an object to a JSON-serializable type when the object is not
+    serializable by the default JSON code.
+    """
+
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+
+    raise TypeError("Type '{}' is not serializable".format(type(obj)))
+
 class Classification(object):
     """
     Classification of sprint features.
@@ -85,6 +99,21 @@ class Classification(object):
 
     def __init__(self, args):
         self.args = args
+
+    def _export_results(self, data_sets, results):
+        predictions = results["labels"]
+        if predictions.size == 0:
+            logging.info('No prediction output')
+        else:
+            data_set = data_sets.data_sets[data_sets.VALIDATION]
+            logging.info('Predicted labels: %r', predictions)
+            logging.info('Actual labels: %r', data_set[data_sets.LABELS])
+            results.update({
+                "projects": data_sets.validation_context[:, data_sets.PROJECT_KEY],
+                "sprints": data_sets.validation_context[:, data_sets.SPRINT_KEY]
+            })
+        with open(self.args.results, 'w') as results_file:
+            json.dump(results, results_file, default=serialize_json)
 
     def run_session(self, model, test_ops, data_sets):
         """
@@ -103,10 +132,8 @@ class Classification(object):
             if self.args.train:
                 runner.run(data_sets)
 
-            predictions = runner.evaluate(data_sets)
-            logging.info('Predicted labels: %r', predictions)
-            logging.info('Actual labels: %r',
-                         data_sets.data_sets[data_sets.VALIDATION][1])
+            results = runner.evaluate(data_sets)
+            self._export_results(data_sets, results)
 
     def main(self, _):
         """
@@ -132,7 +159,10 @@ class Classification(object):
                 tf.set_random_seed(self.args.seed)
 
             # Create the training batches, network, and training ops.
-            inputs, labels, weights = data_sets.get_batches(data_sets.TRAIN)
+            batch_set = data_sets.get_batches(data_sets.TRAIN)
+            inputs = batch_set[data_sets.INPUTS]
+            labels = batch_set[data_sets.LABELS]
+            weights = batch_set[data_sets.WEIGHTS]
 
             model_class = Model.get_model(self.args.model)
             model = model_class(self.args,

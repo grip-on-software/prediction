@@ -14,9 +14,16 @@ class Dataset(object):
     Dataset selector and provider.
     """
 
+    # Indexes of the prepurposed data sets in the data_sets variable
     TRAIN = 0
     TEST = 1
     VALIDATION = 2
+
+    # Indexes of the inputs, labels and other column data in each data set
+    INPUTS = 0
+    LABELS = 1
+    WEIGHTS = 2
+    WEATHER = 3
 
     # Indexes in the original dataset of uniquely identifying keys
     PROJECT_KEY = 0
@@ -26,6 +33,7 @@ class Dataset(object):
         self.args = args
         self.load_datasets()
         self._batches = {}
+        self.ratios = None
 
     def _translate(self, indices, translation):
         for index in indices:
@@ -87,9 +95,10 @@ class Dataset(object):
         logging.debug('Leftover column names: %r', names)
 
         dataset = np.nan_to_num(full_data[:, tuple(indexes)])
+
         projects = full_data[:, self.PROJECT_KEY]
         project_splits = np.squeeze(np.argwhere(np.diff(projects) != 0) + 1)
-        return dataset, labels, project_splits
+        return dataset, labels, project_splits, full_data
 
     @classmethod
     def _last_sprint_weather(cls, labels, project_splits):
@@ -136,7 +145,7 @@ class Dataset(object):
         labels = labels[split_mask]
         weather = weather[split_mask]
 
-        return dataset, labels, weather, latest, latest_labels
+        return dataset, labels, weather, latest, latest_labels, latest_indexes
 
     @staticmethod
     def _scale(train_data, test_data):
@@ -149,10 +158,9 @@ class Dataset(object):
 
         return train_data, test_data
 
-    @staticmethod
-    def _weight_classes(labels):
+    def _weight_classes(self, labels):
         # Provide rebalancing weights.
-        train_labels = labels[0]
+        train_labels = labels[self.TRAIN]
         counts = np.bincount(train_labels)
         ratios = (counts / float(len(train_labels))).astype(np.float32)
         logging.debug('Ratios: %r', ratios)
@@ -160,45 +168,59 @@ class Dataset(object):
         weights = [np.choose(set_labels, ratios) for set_labels in labels]
         return weights, ratios
 
-    def load_datasets(self):
-        """
-        Load the dataset and split into train/test, and inputs/labels.
-        """
-
-        dataset, labels, project_splits = self._select_data(*self._load())
-
-        weather = self._last_sprint_weather_accuracy(labels, project_splits,
-                                                     name='full dataset')[0]
-
-        if self.args.roll_sprints:
-            dataset, labels, weather, validation_data, validation_labels = \
-                self._roll_sprints(project_splits, dataset, labels, weather)
-        else:
-            validation_data = np.empty(0)
-            validation_labels = np.empty(0)
-
+    def _assemble_sets(self, dataset, labels, weather):
         train_data, test_data, train_labels, test_labels, train_weather, test_weather = \
             train_test_split(dataset, labels, weather,
                              test_size=self.args.test_size,
                              stratify=labels)
 
-        self._last_sprint_weather_accuracy(train_labels, weather=train_weather,
+        train_data, test_data = self._scale(train_data, test_data)
+
+        weights, self.ratios = \
+            self._weight_classes([train_labels, test_labels])
+
+        train = (train_data, train_labels, weights[self.TRAIN], train_weather)
+        test = (test_data, test_labels, weights[self.TEST], test_weather)
+
+        return train, test
+
+    def load_datasets(self):
+        """
+        Load the dataset and split into train/test, and inputs/labels.
+        """
+
+        dataset, labels, project_splits, full_data = \
+            self._select_data(*self._load())
+
+        weather = self._last_sprint_weather_accuracy(labels, project_splits,
+                                                     name='full dataset')[0]
+
+        if self.args.roll_sprints:
+            dataset, labels, weather, validation_data, validation_labels, validation_indexes = \
+                self._roll_sprints(project_splits, dataset, labels, weather)
+        else:
+            validation_data = np.empty(0)
+            validation_labels = np.empty(0)
+
+        train, test = self._assemble_sets(dataset, labels, weather)
+
+        self._last_sprint_weather_accuracy(train[self.LABELS],
+                                           weather=train[self.WEATHER],
                                            name='training set')
-        self._last_sprint_weather_accuracy(test_labels, weather=test_weather,
+        self._last_sprint_weather_accuracy(test[self.LABELS],
+                                           weather=test[self.WEATHER],
                                            name='test set')
 
-        train_data, test_data = self._scale(train_data, test_data)
-        weights, self.ratios = \
-            self._weight_classes([train_labels, test_labels, validation_labels])
-
+        validation_weights = np.full(validation_labels.shape, 0.5)
+        validation = (validation_data, validation_labels, validation_weights, 0)
         self.data_sets = {
-            self.TRAIN: (train_data, train_labels, weights[self.TRAIN]),
-            self.TEST: (test_data, test_labels, weights[self.TEST]),
-            self.VALIDATION:
-                (validation_data, validation_labels, weights[self.VALIDATION])
+            self.TRAIN: train,
+            self.TEST: test,
+            self.VALIDATION: validation
         }
-        self.num_features = train_data.shape[1]
-        self.num_labels = max(labels)+1
+        self.validation_context = full_data[validation_indexes, :]
+        self.num_features = train[self.INPUTS].shape[1]
+        self.num_labels = max(labels) + 1
 
     def get_batches(self, data_set):
         """
@@ -215,12 +237,18 @@ class Dataset(object):
             # Input data, pin to CPU because rest of pipeline is CPU-only
             with tf.device('/cpu:0'):
                 inputs, labels, weights = [
-                    tf.constant(item) for item in self.data_sets[data_set]
+                    tf.constant(item) for item in self.data_sets[data_set][0:3]
                 ]
+
+                # Only loop through the validation set once
+                if data_set == self.VALIDATION:
+                    num_epochs = 1
+                else:
+                    num_epochs = self.args.num_epochs
 
                 inputs, labels, weights = \
                     tf.train.slice_input_producer([inputs, labels, weights],
-                                                  num_epochs=self.args.num_epochs)
+                                                  num_epochs=num_epochs)
 
                 if self.args.stratified_sample:
                     target_prob = [
