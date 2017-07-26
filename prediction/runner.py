@@ -7,6 +7,10 @@ import time
 import numpy as np
 import sklearn.metrics
 import tensorflow as tf
+try:
+    from tensorflow.contrib.learn.python.learn.estimators.prediction_key import PredictionKey
+except ImportError:
+    raise
 
 class Runner(object):
     """
@@ -207,18 +211,39 @@ class TFLearnRunner(Runner):
                                   monitors=[monitor])
 
     def evaluate(self, datasets):
+        def _get_test_input():
+            return self._get_input(datasets, datasets.TEST)
+
         def _get_validation_input():
             return self._get_input(datasets, datasets.VALIDATION)
 
-        probabilities = \
-            self._model.predictor.predict_proba(input_fn=_get_validation_input,
-                                                as_iterable=False)
+        metrics = self._model.predictor.evaluate(input_fn=_get_test_input)
 
-        classes = np.argmax(probabilities, axis=1)
+        outputs = \
+            self._model.predictor.predict(input_fn=_get_validation_input,
+                                          outputs=[
+                                              PredictionKey.LOGITS,
+                                              PredictionKey.CLASSES,
+                                              PredictionKey.PROBABILITIES
+                                          ],
+                                          as_iterable=False)
+
+        logging.info('Outputs: %r', outputs)
+        probabilities = np.choose(outputs[PredictionKey.CLASSES],
+                                  outputs[PredictionKey.PROBABILITIES].T)
+        risk = self._scale_logits(outputs[PredictionKey.LOGITS])
+
         return {
-            "labels": classes,
-            "probabilities": np.choose(classes, probabilities.transpose())
+            "labels": outputs[PredictionKey.CLASSES],
+            "probabilities": probabilities,
+            "risks": risk,
+            "metrics": metrics
         }
+
+    @staticmethod
+    def _scale_logits(logits):
+        scaled = (logits - logits.mean()) / logits.std()
+        return np.squeeze(np.clip(scaled, 0.01, 0.99))
 
 class TFSKLRunner(Runner):
     """

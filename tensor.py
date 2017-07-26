@@ -92,6 +92,8 @@ def serialize_json(obj):
 
     if isinstance(obj, np.ndarray):
         return obj.tolist()
+    if isinstance(obj, np.generic):
+        return obj.item()
 
     raise TypeError("Type '{}' is not serializable".format(type(obj)))
 
@@ -113,7 +115,14 @@ class Classification(object):
             logging.info('Actual labels: %r', data_set[data_sets.LABELS])
             results.update({
                 "projects": data_sets.validation_context[:, data_sets.PROJECT_KEY],
-                "sprints": data_sets.validation_context[:, data_sets.SPRINT_KEY]
+                "sprints": data_sets.validation_context[:, data_sets.SPRINT_KEY],
+                "configuration": {
+                    "label": self.args.label,
+                    "model": self.args.model,
+                    "binary": self.args.binary,
+                    "weighted": self.args.weighted,
+                    "stratified": self.args.stratified_sample
+                }
             })
         with open(self.args.results, 'w') as results_file:
             json.dump(results, results_file, default=serialize_json)
