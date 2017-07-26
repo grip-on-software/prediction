@@ -240,15 +240,18 @@ class Dataset(object):
                     tf.constant(item) for item in self.data_sets[data_set][0:3]
                 ]
 
-                # Only loop through the validation set once
+                # Only loop through the ordered validation set once
                 if data_set == self.VALIDATION:
                     num_epochs = 1
+                    shuffle = False
                 else:
                     num_epochs = self.args.num_epochs
+                    shuffle = True
 
                 inputs, labels, weights = \
                     tf.train.slice_input_producer([inputs, labels, weights],
-                                                  num_epochs=num_epochs)
+                                                  num_epochs=num_epochs,
+                                                  shuffle=shuffle)
 
                 if self.args.stratified_sample:
                     target_prob = [
