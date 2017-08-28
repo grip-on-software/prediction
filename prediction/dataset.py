@@ -259,7 +259,8 @@ class Dataset(object):
                 inputs, labels, weights = \
                     tf.train.slice_input_producer([inputs, labels, weights],
                                                   num_epochs=num_epochs,
-                                                  shuffle=shuffle)
+                                                  shuffle=shuffle,
+                                                  seed=self.args.seed)
 
                 if self.args.stratified_sample:
                     target_prob = [
