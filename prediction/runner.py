@@ -26,12 +26,6 @@ class Runner(object):
         # Input enqueue coordinator
         self._coordinator = tf.train.Coordinator()
 
-        # Build the summary operation based on the collection of summaries.
-        self._summary_op = tf.summary.merge_all()
-
-        self._summary_writer = tf.summary.FileWriter(self.args.train_directory,
-                                                     self._session.graph)
-
     def run(self, datasets):
         """
         Perform the iterative optimization task.
@@ -74,6 +68,15 @@ class TFRunner(Runner):
     Runner for pure TensorFlow models.
     """
 
+    def __init__(self, args, session, model, test_ops):
+        super(TFRunner, self).__init__(args, session, model, test_ops)
+
+        # Build the summary operation based on the collection of summaries.
+        self._summary_op = tf.summary.merge_all()
+
+        self._summary_writer = tf.summary.FileWriter(self.args.train_directory,
+                                                     self._session.graph)
+
     def _build_feed(self, batch_ops):
         batch_inputs, batch_labels, batch_weights = self._session.run(batch_ops)
 
@@ -85,7 +88,7 @@ class TFRunner(Runner):
 
     def loop(self, datasets):
         # Create a saver for writing training checkpoints.
-        saver = tf.train.Saver()
+        saver = tf.train.Saver(max_to_keep=self.args.num_checkpoints)
 
         train_batch_ops = datasets.get_batches(datasets.TRAIN)
         test_batch_ops = datasets.get_batches(datasets.TEST)

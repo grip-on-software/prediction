@@ -33,6 +33,8 @@ def get_parser():
                         help='Convert label to binary classifications')
     parser.add_argument('--train-directory', dest='train_directory',
                         default='/tmp/data', help='Output of training')
+    parser.add_argument('--num-checkpoints', dest='num_checkpoints',
+                        default=100, help='Number of checkpoint models to keep')
     parser.add_argument('--results', default='sprint_labels.json',
                         help='Filename to output JSON results to')
     parser.add_argument('--no-train', default=True, action='store_false',

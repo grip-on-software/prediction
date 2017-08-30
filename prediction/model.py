@@ -283,6 +283,7 @@ class DNNModel(LearnModel):
 
     def build(self):
         run_config = tf.contrib.learn.RunConfig(save_checkpoints_secs=1,
+                                                keep_checkpoint_max=self.args.num_checkpoints,
                                                 model_dir=self.args.train_directory,
                                                 tf_random_seed=self.args.seed)
 
