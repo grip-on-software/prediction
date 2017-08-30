@@ -158,6 +158,7 @@ class Classification(object):
 
         logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s',
                             level=getattr(logging, self.args.log.upper(), None))
+        logging.getLogger('tensorflow').propagate = False
 
         if self.args.seed is not None:
             random.seed(self.args.seed)
