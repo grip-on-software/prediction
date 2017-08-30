@@ -12,7 +12,8 @@ class Cleaner(object):
     """
 
     DEFAULT_PATTERNS = [
-        "checkpoint", "graph.phtxt", "events.out.tfevents.*", "model.ckpt-*.*"
+        "checkpoint", "graph.phtxt", "events.out.tfevents.*", "model.ckpt-*.*",
+        "eval/events.out.tfevents.*"
     ]
 
     def __init__(self, patterns=None):
