@@ -283,7 +283,8 @@ class DNNModel(LearnModel):
 
     def build(self):
         run_config = tf.contrib.learn.RunConfig(save_checkpoints_secs=1,
-                                                model_dir=self.args.train_directory)
+                                                model_dir=self.args.train_directory,
+                                                tf_random_seed=self.args.seed)
 
         if self.args.weighted:
             weight_column = self.WEIGHT_COLUMN
