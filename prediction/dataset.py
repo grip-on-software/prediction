@@ -276,7 +276,7 @@ class Dataset(object):
                                                               target_prob,
                                                               self.args.batch_size,
                                                               **kwargs)
-                    inputs, weights = tensors[0]
+                    inputs, weights = tensors
                 else:
                     inputs, labels, weights = \
                         tf.train.batch([inputs, labels, weights],
