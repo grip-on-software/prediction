@@ -29,8 +29,8 @@ def get_parser():
                         help='Attribute indexes to ignore from the dataset')
     parser.add_argument('--label', default=None,
                         help='Attribute to use instead as label')
-    parser.add_argument('--binary', default=None, type=int, nargs='?', const=1,
-                        help='Convert label to binary classifications')
+    parser.add_argument('--binary', default=None, type=float, nargs='?',
+                        const=1, help='Convert label to binary by threshold')
     parser.add_argument('--train-directory', dest='train_directory',
                         default='/tmp/data', help='Output of training')
     parser.add_argument('--num-checkpoints', dest='num_checkpoints',

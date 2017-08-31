@@ -51,11 +51,11 @@ class Dataset(object):
         label_index = next(self._translate([self.args.label], translation))
         column = np.nan_to_num(data[:, label_index])
         labels = column.astype(int)
-        if np.any(column - labels) != 0:
-            raise ValueError('Label column {0} has non-round numbers'.format(self.args.label))
 
         if self.args.binary is not None:
-            labels = (labels >= self.args.binary).astype(int)
+            labels = (column >= self.args.binary).astype(int)
+        elif np.any(column - labels) != 0:
+            raise ValueError('Label column {0} has non-round numbers'.format(self.args.label))
 
         return labels, label_index
 
