@@ -23,6 +23,8 @@ def get_parser():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--filename', default='sprint_features.arff',
                         help='ARFF file to read training data from')
+    parser.add_argument('--store', default='local',
+                        help='Store type to use to load the file from')
     parser.add_argument('--index', default=None, nargs='*',
                         help='Attribute indexes to use from the dataset')
     parser.add_argument('--remove', default=None, nargs='*',
@@ -72,6 +74,8 @@ def get_parser():
                         help='Create proportionally balanced batches')
     parser.add_argument('--seed', type=int, default=None, nargs='?', const=0,
                         help='Set a predefined random seed')
+    parser.add_argument('--dry', default=False, action='store_true',
+                        help='Do not train or evaluate the model')
     parser.add_argument('--log', default='WARNING',
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         help='Log level (WARNING by default)')
@@ -198,7 +202,8 @@ class Classification(object):
                 accuracy = None
                 pred = None
 
-            self.run_session(model, [accuracy, pred], data_sets)
+            if not self.args.dry:
+                self.run_session(model, [accuracy, pred], data_sets)
 
 def bootstrap():
     """

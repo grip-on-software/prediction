@@ -2,12 +2,43 @@
 TensorFlow ARFF dataset loader.
 """
 
+from io import BytesIO
 import logging
 import tensorflow as tf
 from scipy.io import arff
 import numpy as np
+import owncloud
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+import yaml
+
+class OwnCloudFile(object):
+    _config = None
+
+    def __init__(self, path):
+        self._path = path
+
+        if self._config is None:
+            with open('config.yml') as config_file:
+                self._config = yaml.load(config_file).get('owncloud')
+
+        self._client = owncloud.Client(self._config['url'],
+                                       verify_certs=self._config.get('verify'))
+        self._client.login(self._config['username'], self._config['password'])
+
+    @property
+    def client(self):
+        return self._client
+
+    @property
+    def path(self):
+        return self._path
+
+    def __enter__(self):
+        return BytesIO(self._client.get_file_contents(self._path))
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
 class Dataset(object):
     """
@@ -60,7 +91,11 @@ class Dataset(object):
         return labels, label_index
 
     def _load(self):
-        with open(self.args.filename) as features_file:
+        if self.args.store == 'owncloud':
+            file_opener = OwnCloudFile
+        else:
+            file_opener = open
+        with file_opener(self.args.filename) as features_file:
             data, meta = arff.loadarff(features_file)
 
         logging.debug('Metadata:\n%r', meta)

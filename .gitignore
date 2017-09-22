@@ -5,3 +5,5 @@
 *.cfg
 *.arff
 *.json
+*.yml
+*.crt

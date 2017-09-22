@@ -1,4 +1,6 @@
 numpy
+pyocclient
+pyyaml
 scipy
 scikit-learn
 tensorflow
