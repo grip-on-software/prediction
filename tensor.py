@@ -12,6 +12,7 @@ import numpy as np
 import tensorflow as tf
 from prediction.cleaner import Cleaner
 from prediction.dataset import Dataset
+from prediction.files import get_file_opener
 from prediction.model import Model
 
 def get_parser():
@@ -130,7 +131,8 @@ class Classification(object):
                     "stratified": self.args.stratified_sample
                 }
             })
-        with open(self.args.results, 'w') as results_file:
+        file_opener = get_file_opener(self.args)
+        with file_opener(self.args.results, 'w') as results_file:
             json.dump(results, results_file, default=serialize_json)
 
     def run_session(self, model, test_ops, data_sets):
