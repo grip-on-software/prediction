@@ -140,12 +140,19 @@ class Dataset(object):
 
         projects = np.split(dataset, project_splits)
         end_index = -1 if self.args.roll_validation else None
-        rolled_projects = [np.roll(p, 1, axis=0)[1:end_index] for p in projects]
+        rolled_projects = [np.hstack([
+            np.roll(p, i, axis=0)
+            for i in range(1, self.args.roll_sprints+1)
+        ])[self.args.roll_sprints:end_index] for p in projects]
         dataset = np.vstack(rolled_projects)
 
         split_mask = np.ones(len(labels), np.bool)
-        split_mask[0] = False
-        split_mask[project_splits] = False
+        split_mask[0:self.args.roll_sprints] = False
+
+        project_trims = np.hstack([
+            project_splits+i for i in range(self.args.roll_sprints)
+        ])
+        split_mask[project_trims] = False
         if self.args.roll_validation:
             split_mask[project_splits-1] = False
             split_mask[-1] = False
@@ -205,7 +212,7 @@ class Dataset(object):
         weather = self._last_sprint_weather_accuracy(labels, project_splits,
                                                      name='full dataset')[0]
 
-        if self.args.roll_sprints:
+        if self.args.roll_sprints > 0:
             dataset, labels, weather, validation_data, validation_labels, validation_indexes = \
                 self._roll_sprints(project_splits, dataset, labels, weather)
         else:
