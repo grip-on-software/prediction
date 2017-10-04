@@ -125,6 +125,15 @@ class Dataset(object):
         logging.info('Last sprint weather accuracy (%s): %.2f', name, accuracy)
         return weather, num_correct, accuracy
 
+    def _roll(self, project_data):
+        rolls = []
+        for i in range(1, self.args.roll_sprints+1):
+            rolled_data = np.roll(project_data, i, axis=0)
+            rolled_data[:i, :] = np.nan
+            rolls.append(rolled_data)
+
+        return np.hstack(rolls)
+
     def _roll_sprints(self, project_splits, dataset, labels, weather):
         # Roll the sprints such that a sprint has features from the sprint
         # before it, while the labels remain the same for that sprint.
@@ -136,23 +145,31 @@ class Dataset(object):
         latest_labels = labels[latest_indexes]
 
         if self.args.roll_labels:
+            # Roll the labels of the previous sprint into the features of
+            # the current sprint, like how last sprint's weather classification
+            # has access to this label as well.
             dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
 
         projects = np.split(dataset, project_splits)
-        end_index = -1 if self.args.roll_validation else None
-        rolled_projects = [np.hstack([
-            np.roll(p, i, axis=0)
-            for i in range(1, self.args.roll_sprints+1)
-        ])[self.args.roll_sprints:end_index] for p in projects]
-        dataset = np.vstack(rolled_projects)
+        # After rolling, the first sample is always empty, but we may wish to
+        # keep samples with only a few sprints worth of features.
+        trim_start = 1 if self.args.keep_incomplete else self.args.roll_sprints
+        trim_end = -1 if self.args.roll_validation else None
+        dataset = np.vstack([self._roll(p)[trim_start:trim_end] for p in projects])
 
         split_mask = np.ones(len(labels), np.bool)
-        split_mask[0:self.args.roll_sprints] = False
 
-        project_trims = np.hstack([
-            project_splits+i for i in range(self.args.roll_sprints)
-        ])
-        split_mask[project_trims] = False
+        if self.args.keep_incomplete:
+            split_mask[0] = False
+            split_mask[project_splits] = False
+        else:
+            split_mask[0:self.args.roll_sprints] = False
+
+            project_trims = np.hstack([
+                project_splits+i for i in range(self.args.roll_sprints)
+            ])
+            split_mask[project_trims] = False
+
         if self.args.roll_validation:
             split_mask[project_splits-1] = False
             split_mask[-1] = False
@@ -169,9 +186,9 @@ class Dataset(object):
         # Scale the data to an appropriate normalized scale [0, 1) suitable for
         # training in normally weighted neural networks.
         scaler = MinMaxScaler((0, 1), copy=True)
-        scaler.fit(train_data)
-        train_data = scaler.transform(train_data)
-        test_data = scaler.transform(test_data)
+        scaler.fit(train_data[~np.isnan(train_data).any(axis=1)])
+        train_data = train_data * scaler.scale_ + scaler.min_
+        test_data = test_data * scaler.scale_ + scaler.min_
 
         return train_data, test_data
 
@@ -186,6 +203,9 @@ class Dataset(object):
         return weights, ratios
 
     def _assemble_sets(self, dataset, labels, weather):
+        if self.args.replace_na is not False:
+            dataset[np.isnan(dataset)] = self.args.replace_na
+
         train_data, test_data, train_labels, test_labels, train_weather, test_weather = \
             train_test_split(dataset, labels, weather,
                              test_size=self.args.test_size,

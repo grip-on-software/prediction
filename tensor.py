@@ -69,6 +69,12 @@ def get_parser():
     parser.add_argument('--roll-validation', dest='roll_validation',
                         default=False, action='store_true',
                         help='Use previous features in validation set, shrink train/test')
+    parser.add_argument('--keep-incomplete', dest='keep_incomplete',
+                        default=False, action='store_true',
+                        help='Keep rolled samples that do not have all sprints')
+    parser.add_argument('--replace-na', dest='replace_na', type=float,
+                        default=False, nargs='?', const=0,
+                        help='Replace NaN values with a valid value')
     parser.add_argument('--weighted', default=False, action='store_true',
                         help='Model can use class weights for balancing')
     parser.add_argument('--stratified-sample', dest='stratified_sample',
