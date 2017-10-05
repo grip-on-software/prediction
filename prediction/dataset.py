@@ -4,6 +4,7 @@ TensorFlow ARFF dataset loader.
 
 import logging
 import tensorflow as tf
+import expression
 from scipy.io import arff
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -48,17 +49,30 @@ class Dataset(object):
                 else:
                     raise ValueError('Index {0} could not be understood'.format(index))
 
-    def _get_labels(self, data, translation):
-        label_index = next(self._translate([self.args.label], translation))
-        column = np.nan_to_num(data[:, label_index])
+    def _get_labels(self, data, columns, translation):
+        parser = expression.Expression_Parser(variables=columns)
+        column = parser.parse(self.args.label)
+        label_indexes = set()
+        if isinstance(column, int):
+            label_indexes.add(column)
+            column = data[:, column]
+        elif not isinstance(column, np.ndarray):
+            raise TypeError("Invalid label {0}: {1!r}".format(self.args.label,
+                                                              type(column)))
+
+        label_indexes.update(self._translate(parser.used_variables, translation))
+
+        if self.args.replace_na is not False:
+            column[np.isnan(column)] = self.args.replace_na
+
         labels = column.astype(int)
 
         if self.args.binary is not None:
             labels = (column >= self.args.binary).astype(int)
         elif np.any(column - labels) != 0:
-            raise ValueError('Label column {0} has non-round numbers'.format(self.args.label))
+            raise ValueError('Label {0} produced non-round numbers'.format(self.args.label))
 
-        return labels, label_index
+        return labels, label_indexes
 
     def _load(self):
         file_opener = get_file_opener(self.args)
@@ -85,10 +99,12 @@ class Dataset(object):
             indexes -= set(self._translate(self.args.remove, name_translation))
 
         if self.args.label:
-            labels, label_index = self._get_labels(full_data, name_translation)
-            indexes.discard(label_index)
+            name_columns = dict(zip(meta.names(), full_data.T))
+            labels, label_indexes = self._get_labels(full_data, name_columns,
+                                                     name_translation)
+            indexes -= label_indexes
 
-            logging.debug('Selected label %d: %r', label_index, labels)
+            logging.debug('Selected labels %r: %r', label_indexes, labels)
         else:
             labels = np.random.randint(0, 1+1, size=(full_data.shape[0],))
 
