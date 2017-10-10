@@ -127,17 +127,23 @@ class Classification(object):
             data_set = data_sets.data_sets[data_sets.VALIDATION]
             logging.info('Predicted labels: %r', predictions)
             logging.info('Actual labels: %r', data_set[data_sets.LABELS])
-            results.update({
-                "projects": data_sets.validation_context[:, data_sets.PROJECT_KEY],
-                "sprints": data_sets.validation_context[:, data_sets.SPRINT_KEY],
-                "configuration": {
-                    "label": self.args.label,
-                    "model": self.args.model,
-                    "binary": self.args.binary,
-                    "weighted": self.args.weighted,
-                    "stratified": self.args.stratified_sample
-                }
-            })
+
+            keys = [
+                ("projects", data_sets.PROJECT_KEY),
+                ("sprints", data_sets.SPRINT_KEY)
+            ]
+            for result_key, validation_key in keys:
+                validation = data_sets.validation_context[:, validation_key]
+                results[result_key] = validation.astype(np.int)
+
+            results["configuration"] = {
+                "label": self.args.label,
+                "model": self.args.model,
+                "binary": self.args.binary,
+                "weighted": self.args.weighted,
+                "stratified": self.args.stratified_sample
+            }
+
         file_opener = get_file_opener(self.args)
         with file_opener(self.args.results, 'w') as results_file:
             json.dump(results, results_file, default=serialize_json)
