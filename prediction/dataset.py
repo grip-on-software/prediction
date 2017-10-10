@@ -166,12 +166,14 @@ class Dataset(object):
             # has access to this label as well.
             dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
 
-        projects = np.split(dataset, project_splits)
         # After rolling, the first sample is always empty, but we may wish to
         # keep samples with only a few sprints worth of features.
         trim_start = 1 if self.args.keep_incomplete else self.args.roll_sprints
         trim_end = -1 if self.args.roll_validation else None
-        dataset = np.vstack([self._roll(p)[trim_start:trim_end] for p in projects])
+        dataset = np.vstack([
+            self._roll(p)[trim_start:trim_end]
+            for p in np.split(dataset, project_splits)
+        ])
 
         split_mask = np.ones(len(labels), np.bool)
 
@@ -190,6 +192,8 @@ class Dataset(object):
             split_mask[project_splits-1] = False
             split_mask[-1] = False
             # Reobtain validation inputs after the roll is completed
+            removed_splits = np.cumsum([trim_start+1] * project_splits.shape[0])
+            latest_indexes = np.hstack([project_splits-1 - removed_splits, -1])
             latest = dataset[latest_indexes, :]
 
         labels = labels[split_mask]
