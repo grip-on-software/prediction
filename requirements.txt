@@ -1,8 +1,10 @@
 expression-parser
+keras
 keyring
 numpy
 pyocclient
 pyyaml
 scipy
 scikit-learn
+secretstorage
 tensorflow

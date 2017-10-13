@@ -307,6 +307,7 @@ class KerasRunner(Runner):
 
     def _test(self, datasets, epoch, logs): # pylint: disable=unused-argument
         if epoch % self.args.test_interval == 0:
+            logging.info('Test evaluation at epoch %d', epoch)
             test_data = datasets.data_sets[datasets.TEST][datasets.INPUTS]
             test_labels = datasets.data_sets[datasets.TEST][datasets.LABELS]
             one_hot_labels = keras.utils.to_categorical(test_labels)
