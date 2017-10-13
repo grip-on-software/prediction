@@ -47,6 +47,8 @@ def get_parser():
     parser.add_argument('--clean-patterns', nargs='*', dest='clean_patterns',
                         default=Cleaner.DEFAULT_PATTERNS,
                         help='Glob patterns to remove from train directory')
+    parser.add_argument('--device', default='/cpu:0',
+                        help='TensorFlow device to pin input data to')
     parser.add_argument('--num-epochs', dest='num_epochs', type=int,
                         default=1000, help='Number of epochs to train')
     parser.add_argument('--batch-size', dest='batch_size', type=int,
@@ -140,7 +142,8 @@ class Classification(object):
         Perform the training epoch runs.
         """
 
-        with tf.Session() as sess:
+        config = tf.ConfigProto(allow_soft_placement=True)
+        with tf.Session(config=config) as sess:
             # Create the op for initializing variables.
             init_op = tf.group(tf.global_variables_initializer(),
                                tf.local_variables_initializer())

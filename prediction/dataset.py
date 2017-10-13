@@ -244,8 +244,8 @@ class Dataset(object):
             raise IndexError('Data set #{} does not exist'.format(data_set))
 
         with tf.name_scope('input'):
-            # Input data, pin to CPU because rest of pipeline is CPU-only
-            with tf.device('/cpu:0'):
+            # Input data
+            with tf.device(self.args.device):
                 inputs, labels, weights = [
                     tf.constant(item) for item in self.data_sets[data_set][0:3]
                 ]
