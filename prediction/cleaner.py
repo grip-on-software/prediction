@@ -13,7 +13,7 @@ class Cleaner(object):
 
     DEFAULT_PATTERNS = [
         "checkpoint", "graph.phtxt", "events.out.tfevents.*", "model.ckpt-*.*",
-        "eval/events.out.tfevents.*"
+        "eval/events.out.tfevents.*", "net.*.hdf5"
     ]
 
     def __init__(self, patterns=None):

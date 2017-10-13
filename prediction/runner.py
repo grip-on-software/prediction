@@ -2,8 +2,11 @@
 TensorFlow based prediction runners.
 """
 
+from functools import partial
 import logging
+import os
 import time
+import keras
 import numpy as np
 import sklearn.metrics
 import tensorflow as tf
@@ -260,6 +263,57 @@ class TFSKLRunner(Runner):
         train_data = datasets.data_sets[datasets.TRAIN][datasets.INPUTS]
         train_labels = datasets.data_sets[datasets.TRAIN][datasets.LABELS]
         self._model.predictor.fit(train_data, train_labels)
+
+    def evaluate(self, datasets):
+        datasets.clear_batches(datasets.VALIDATION)
+        inputs = datasets.data_sets[datasets.VALIDATION][0]
+        return {
+            "labels": self._model.predictor.predict(inputs)
+        }
+
+class KerasRunner(Runner):
+    """
+    Runner for models implemented in Keras.
+    """
+
+    def loop(self, datasets):
+        datasets.clear_batches(datasets.TRAIN)
+        datasets.clear_batches(datasets.TEST)
+
+        # Define training data
+        train_data = datasets.data_sets[datasets.TRAIN][datasets.INPUTS]
+        train_labels = datasets.data_sets[datasets.TRAIN][datasets.LABELS]
+        one_hot_labels = keras.utils.to_categorical(train_labels)
+
+        # Define callbacks
+        calls = []
+
+        checkpoint_path = os.path.join(self.args.train_directory,
+                                       'net.{epoch:02d}-{loss:.2f}.hdf5')
+        checkpoint_period = self.args.num_epochs // self.args.num_checkpoints
+        calls.append(keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
+                                                     period=checkpoint_period))
+
+        calls.append(keras.callbacks.TensorBoard(log_dir=self.args.train_directory))
+
+        test_partial = partial(self._test, datasets)
+        calls.append(keras.callbacks.LambdaCallback(on_epoch_end=test_partial))
+
+        self._model.predictor.fit(train_data, one_hot_labels,
+                                  epochs=self.args.num_epochs,
+                                  batch_size=self.args.batch_size,
+                                  shuffle=True, callbacks=calls,
+                                  verbose=self.args.log == 'DEBUG')
+
+    def _test(self, datasets, epoch, logs): # pylint: disable=unused-argument
+        if epoch % self.args.test_interval == 0:
+            test_data = datasets.data_sets[datasets.TEST][datasets.INPUTS]
+            test_labels = datasets.data_sets[datasets.TEST][datasets.LABELS]
+            one_hot_labels = keras.utils.to_categorical(test_labels)
+
+            metrics = self._model.predictor.evaluate(test_data, one_hot_labels,
+                                                     batch_size=self.args.batch_size)
+            logging.info('%r', zip(self._model.predictor.metrics_names, metrics))
 
     def evaluate(self, datasets):
         datasets.clear_batches(datasets.VALIDATION)

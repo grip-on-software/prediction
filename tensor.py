@@ -1,5 +1,5 @@
 """
-Tensorflow for sprint features.
+Classification and prediction models for sprint features.
 """
 
 from __future__ import print_function

@@ -4,7 +4,9 @@ TensorFlow prediction models.
 
 import math
 import tensorflow as tf
-from .runner import TFRunner, TFLearnRunner, TFSKLRunner
+import keras.models as km
+import keras.layers as kl
+from .runner import TFRunner, TFLearnRunner, TFSKLRunner, KerasRunner
 
 class Model(object):
     """
@@ -322,3 +324,60 @@ class DBNModel(LearnModel):
             batch_size=self.args.batch_size,
             activation_function='relu',
             dropout_p=0.2)
+
+class KerasModel(Model):
+    """
+    Model based on a Keras model.
+    """
+
+    RUNNER = KerasRunner
+
+    def __init__(self, args, dtypes, sizes):
+        super(KerasModel, self).__init__(args, dtypes, sizes)
+        self.predictor = None
+
+    def build(self):
+        raise NotImplementedError('Must be implemented by subclasses')
+
+@Model.register('kdnn')
+class KerasDNNModel(KerasModel):
+    """
+    Deep neural network model from Keras with dropout.
+    """
+
+    @classmethod
+    def add_arguments(cls, parser):
+        group = parser.add_argument_group('KDNN', 'Deep dropout neural network')
+        group.add_argument('--dhiddens', nargs='+', type=int,
+                           default=[300, 200, 100],
+                           help='Number of units per hidden layer')
+        group.add_argument('--dropouts', nargs='+', type=float,
+                           default=[0.5],
+                           help='Ratio of units to drop out on the layers')
+
+    def build(self):
+        model = km.Sequential()
+
+        # Add first hidden layer.
+        model.add(kl.Dense(self.args.hiddens[0], input_dim=self.num_features,
+                           activation='relu'))
+        model.add(kl.Dropout(self.args.dropouts[0]))
+
+        # Add other hidden layers
+        for index, hiddens in enumerate(self.args.hiddens[1:]):
+            model.add(kl.Dense(hiddens, activation='relu'))
+
+            dropout_index = min(index+1, len(self.args.dropouts)-1)
+            model.add(kl.Dropout(self.args.dropouts[dropout_index]))
+
+        model.add(kl.Dense(self.num_labels, activation='softmax'))
+
+        if self.num_labels <= 1:
+            loss_function = 'binary_crossentropy'
+        else:
+            loss_function = 'categorical_crossentropy'
+
+        model.compile(optimizer='rmsprop', loss=loss_function,
+                      metrics=['accuracy'])
+
+        self.predictor = model
