@@ -5,6 +5,7 @@ We support local file reads as well as ownCloud communication.
 """
 
 from io import BytesIO
+import keyring
 import owncloud
 import yaml
 
@@ -38,7 +39,14 @@ class OwnCloudFile(object):
 
         self._client = owncloud.Client(self._config['url'],
                                        verify_certs=self._config.get('verify'))
-        self._client.login(self._config['username'], self._config['password'])
+
+        username = self._config['username']
+        if self._config.get('keychain'):
+            password = keyring.get_password('owncloud', username)
+        else:
+            password = self._config['password']
+
+        self._client.login(username, password)
         self._stream = None
 
     @property
@@ -62,6 +70,8 @@ class OwnCloudFile(object):
             self._stream = BytesIO()
         else:
             self._stream = BytesIO(self._client.get_file_contents(self._path))
+
+        return self._stream
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._mode == 'w':

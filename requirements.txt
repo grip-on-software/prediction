@@ -1,4 +1,5 @@
 expression-parser
+keyring
 numpy
 pyocclient
 pyyaml
