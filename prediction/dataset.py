@@ -179,6 +179,10 @@ class Dataset(object):
 
         split_mask = np.ones(len(labels), np.bool)
 
+        # Remove labels and weather data from the normal train/test dataset for
+        # removed (incomplete) samples and samples used for validation set
+        split_mask[project_splits-1] = False
+        split_mask[-1] = False
         if self.args.keep_incomplete:
             split_mask[0] = False
             split_mask[project_splits] = False
@@ -191,11 +195,13 @@ class Dataset(object):
             split_mask[project_trims] = False
 
         if self.args.roll_validation:
-            split_mask[project_splits-1] = False
-            split_mask[-1] = False
+            split_mask[project_splits-2] = False
+            split_mask[-2] = False
             # Reobtain validation features after the roll is completed
             latest_indexes = latest_indexes - 1
             latest = previous
+
+        logging.debug('%r', split_mask)
 
         labels = labels[split_mask]
         weather = weather[split_mask]
