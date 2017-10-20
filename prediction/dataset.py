@@ -156,8 +156,10 @@ class Dataset(object):
         # Remove the sprint at the start of a project in lack of features.
         logging.debug('Project splits: %r', project_splits)
 
+        # Validation data: original indexes in the dataset, features and labels
         latest_indexes = np.hstack([project_splits-1, -1])
         latest = dataset[latest_indexes, :]
+        previous = dataset[latest_indexes-1, :]
         latest_labels = labels[latest_indexes]
 
         if self.args.roll_labels:
@@ -169,7 +171,7 @@ class Dataset(object):
         # After rolling, the first sample is always empty, but we may wish to
         # keep samples with only a few sprints worth of features.
         trim_start = 1 if self.args.keep_incomplete else self.args.roll_sprints
-        trim_end = -1 if self.args.roll_validation else None
+        trim_end = -2 if self.args.roll_validation else -1
         dataset = np.vstack([
             self._roll(p)[trim_start:trim_end]
             for p in np.split(dataset, project_splits)
@@ -191,10 +193,9 @@ class Dataset(object):
         if self.args.roll_validation:
             split_mask[project_splits-1] = False
             split_mask[-1] = False
-            # Reobtain validation inputs after the roll is completed
-            removed_splits = np.cumsum([trim_start+1] * project_splits.shape[0])
-            latest_indexes = np.hstack([project_splits-1 - removed_splits, -1])
-            latest = dataset[latest_indexes, :]
+            # Reobtain validation features after the roll is completed
+            latest_indexes = latest_indexes - 1
+            latest = previous
 
         labels = labels[split_mask]
         weather = weather[split_mask]
