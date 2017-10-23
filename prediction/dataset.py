@@ -158,17 +158,17 @@ class Dataset(object):
         # Remove the sprint at the start of a project in lack of features.
         logging.debug('Project splits: %r', project_splits)
 
-        # Validation data: original indexes in the dataset, features and labels
-        latest_indexes = np.hstack([project_splits-1, -1])
-        latest = dataset[latest_indexes, :]
-        previous = dataset[latest_indexes-1, :]
-        latest_labels = labels[latest_indexes]
-
         if self.args.roll_labels:
             # Roll the labels of the previous sprint into the features of
             # the current sprint, like how last sprint's weather classification
             # has access to this label as well.
             dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
+
+        # Validation data: original indexes in the dataset, features and labels
+        latest_indexes = np.hstack([project_splits-1, -1])
+        latest = dataset[latest_indexes, :]
+        previous = dataset[latest_indexes-1, :]
+        latest_labels = labels[latest_indexes]
 
         # After rolling, the first sample is always empty, but we may wish to
         # keep samples with only a few sprints worth of features.
