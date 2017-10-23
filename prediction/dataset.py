@@ -112,7 +112,9 @@ class Dataset(object):
         logging.debug('Leftover indices: %r', indexes)
         logging.debug('Leftover column names: %r', names)
 
-        dataset = np.nan_to_num(full_data[:, tuple(indexes)])
+        dataset = full_data[:, tuple(indexes)]
+        if self.args.replace_na is not False:
+            dataset[np.isnan(dataset)] = self.args.replace_na
 
         projects = full_data[:, self.PROJECT_KEY]
         project_splits = np.squeeze(np.argwhere(np.diff(projects) != 0) + 1)
@@ -208,16 +210,14 @@ class Dataset(object):
 
         return dataset, labels, weather, latest, latest_labels, latest_indexes
 
-    @staticmethod
-    def _scale(train_data, test_data):
+    def _scale(self, datasets):
         # Scale the data to an appropriate normalized scale [0, 1) suitable for
         # training in normally weighted neural networks.
         scaler = MinMaxScaler((0, 1), copy=True)
+        train_data = datasets[self.TRAIN]
         scaler.fit(train_data[~np.isnan(train_data).any(axis=1)])
-        train_data = train_data * scaler.scale_ + scaler.min_
-        test_data = test_data * scaler.scale_ + scaler.min_
 
-        return train_data, test_data
+        return [dataset * scaler.scale_ + scaler.min_ for dataset in datasets]
 
     def _weight_classes(self, labels):
         # Provide rebalancing weights.
@@ -229,24 +229,26 @@ class Dataset(object):
         weights = [np.choose(set_labels, ratios) for set_labels in labels]
         return weights, ratios
 
-    def _assemble_sets(self, dataset, labels, weather):
-        if self.args.replace_na is not False:
-            dataset[np.isnan(dataset)] = self.args.replace_na
-
+    def _assemble_sets(self, dataset, labels, weather, validation):
         train_data, test_data, train_labels, test_labels, train_weather, test_weather = \
             train_test_split(dataset, labels, weather,
                              test_size=self.args.test_size,
                              stratify=labels)
 
-        train_data, test_data = self._scale(train_data, test_data)
+        validation_data, validation_labels = validation
+        validation_weights = np.full(validation_labels.shape, 0.5)
+
+        train_data, test_data, validation_data = \
+            self._scale([train_data, test_data, validation_data])
 
         weights, self.ratios = \
             self._weight_classes([train_labels, test_labels])
 
-        train = (train_data, train_labels, weights[self.TRAIN], train_weather)
-        test = (test_data, test_labels, weights[self.TEST], test_weather)
-
-        return train, test
+        return [
+            (train_data, train_labels, weights[self.TRAIN], train_weather),
+            (test_data, test_labels, weights[self.TEST], test_weather),
+            (validation_data, validation_labels, validation_weights, 0)
+        ]
 
     def load_datasets(self):
         """
@@ -266,7 +268,9 @@ class Dataset(object):
             validation_data = np.empty(0)
             validation_labels = np.empty(0)
 
-        train, test = self._assemble_sets(dataset, labels, weather)
+        train, test, validation = \
+            self._assemble_sets(dataset, labels, weather,
+                                (validation_data, validation_labels))
 
         self._last_sprint_weather_accuracy(train[self.LABELS],
                                            weather=train[self.WEATHER],
@@ -275,8 +279,6 @@ class Dataset(object):
                                            weather=test[self.WEATHER],
                                            name='test set')
 
-        validation_weights = np.full(validation_labels.shape, 0.5)
-        validation = (validation_data, validation_labels, validation_weights, 0)
         self.data_sets = {
             self.TRAIN: train,
             self.TEST: test,
