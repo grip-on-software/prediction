@@ -284,7 +284,7 @@ class DNNModel(LearnModel):
                            help='Number of units per hidden layer')
 
     def build(self):
-        run_config = tf.contrib.learn.RunConfig(save_checkpoints_secs=1,
+        run_config = tf.contrib.learn.RunConfig(save_checkpoints_steps=self.args.train_interval,
                                                 keep_checkpoint_max=self.args.num_checkpoints,
                                                 model_dir=self.args.train_directory,
                                                 tf_random_seed=self.args.seed)
