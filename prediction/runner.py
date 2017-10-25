@@ -257,9 +257,9 @@ class TFLearnRunner(Runner):
 
         scaled = np.zeros(shape=len(logits))
         if np.any(logits < 0):
-            scaled[logits < 0] = neg_scaler.transform(logits[logits < 0].reshape(-1, 1))
+            scaled[logits < 0] = logits[logits < 0] * neg_scaler.scale_ + neg_scaler.min_
         if np.any(logits >= 0):
-            scaled[logits >= 0] = pos_scaler.transform(logits[logits >= 0].reshape(-1, 1))
+            scaled[logits >= 0] = logits[logits >= 0] * pos_scaler.scale_ + pos_scaler.min_
 
         return scaled
 
