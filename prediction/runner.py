@@ -248,9 +248,9 @@ class TFLearnRunner(Runner):
 
     @staticmethod
     def _scale_logits(logits):
-        mirror = np.hstack([logits, -logits])
+        mirror = np.hstack([np.squeeze(logits), -np.squeeze(logits)])
         scaled = (mirror - mirror.mean()) / mirror.std()
-        return np.squeeze(np.clip(scaled, 0.01, 0.99))[:len(logits)]
+        return np.clip(scaled - scaled.min(), 0.01, 0.99)[:len(logits)]
 
 class TFSKLRunner(Runner):
     """
