@@ -9,6 +9,7 @@ import time
 import keras
 import numpy as np
 import sklearn.metrics
+from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
 try:
     from tensorflow.contrib.learn.python.learn.estimators.prediction_key import PredictionKey
@@ -248,9 +249,20 @@ class TFLearnRunner(Runner):
 
     @staticmethod
     def _scale_logits(logits):
-        mirror = np.hstack([np.squeeze(logits), -np.squeeze(logits)])
-        scaled = (mirror - mirror.mean()) / mirror.std()
-        return np.clip(scaled - scaled.min(), 0.01, 0.99)[:len(logits)]
+        logits = logits.reshape(-1, 1)
+        neg_scaler = MinMaxScaler((0.1, 0.49), copy=True)
+        pos_scaler = MinMaxScaler((0.5, 0.99), copy=True)
+
+        neg_scaler.fit(-abs(logits))
+        pos_scaler.fit(abs(logits))
+
+        scaled = np.zeros(shape=len(logits))
+        if np.any(logits < 0):
+            scaled[logits < 0] = neg_scaler.transform(logits[logits < 0])
+        if np.any(logits >= 0):
+            scaled[logits >= 0] = pos_scaler.transform(logits[logits >= 0])
+
+        return scaled
 
 class TFSKLRunner(Runner):
     """
