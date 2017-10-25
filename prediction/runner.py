@@ -249,18 +249,17 @@ class TFLearnRunner(Runner):
 
     @staticmethod
     def _scale_logits(logits):
-        logits = logits.reshape(-1, 1)
         neg_scaler = MinMaxScaler((0.1, 0.49), copy=True)
         pos_scaler = MinMaxScaler((0.5, 0.99), copy=True)
 
-        neg_scaler.fit(-abs(logits))
-        pos_scaler.fit(abs(logits))
+        neg_scaler.fit(-abs(logits).reshape(-1, 1))
+        pos_scaler.fit(abs(logits).reshape(-1, 1))
 
         scaled = np.zeros(shape=len(logits))
         if np.any(logits < 0):
-            scaled[logits < 0] = neg_scaler.transform(logits[logits < 0])
+            scaled[logits < 0] = neg_scaler.transform(logits[logits < 0].reshape(-1, 1))
         if np.any(logits >= 0):
-            scaled[logits >= 0] = pos_scaler.transform(logits[logits >= 0])
+            scaled[logits >= 0] = pos_scaler.transform(logits[logits >= 0].reshape(-1, 1))
 
         return scaled
 
