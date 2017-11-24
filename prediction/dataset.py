@@ -146,9 +146,7 @@ class Dataset(object):
     def _roll(self, project_data):
         rolls = []
         for i in range(1, self.args.roll_sprints+1):
-            # Keep sprint numbers, roll all other features
             rolled_data = np.roll(project_data, i, axis=0)
-            rolled_data[:, self.SPRINT_KEY] = project_data[:, self.SPRINT_KEY]
 
             # Mark earliest rolled values as missing
             rolled_data[:i, :] = np.nan
@@ -172,8 +170,7 @@ class Dataset(object):
         # Validation data: original indexes in the dataset, features and labels
         latest_indexes = np.hstack([project_splits-1, -1])
         latest = dataset[latest_indexes, :]
-        previous = np.copy(dataset[latest_indexes-1, :])
-        previous[:, self.SPRINT_KEY] = latest[:, self.SPRINT_KEY]
+        previous = dataset[latest_indexes-1, :]
         latest_labels = labels[latest_indexes]
 
         # After rolling, the first sample is always empty, but we may wish to
@@ -206,7 +203,8 @@ class Dataset(object):
             split_mask[project_splits-2] = False
             split_mask[-2] = False
             # Reobtain validation features after the roll is completed
-            latest_indexes = latest_indexes - 1
+            # Do not alter the indexes because the context from the full data
+            # remains the same.
             latest = previous
 
         logging.debug('%r', split_mask)
@@ -290,7 +288,11 @@ class Dataset(object):
             self.TEST: test,
             self.VALIDATION: validation
         }
+
         self.validation_context = full_data[validation_indexes, :]
+        logging.info('Validation sprints: %r',
+                     self.validation_context[:, (self.PROJECT_KEY, self.SPRINT_KEY)])
+
         self.num_features = train[self.INPUTS].shape[1]
         self.num_labels = max(labels) + 1
 
