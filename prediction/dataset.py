@@ -172,7 +172,8 @@ class Dataset(object):
         # Validation data: original indexes in the dataset, features and labels
         latest_indexes = np.hstack([project_splits-1, -1])
         latest = dataset[latest_indexes, :]
-        previous = dataset[latest_indexes-1, :]
+        previous = np.copy(dataset[latest_indexes-1, :])
+        previous[:, self.SPRINT_KEY] = latest[:, self.SPRINT_KEY]
         latest_labels = labels[latest_indexes]
 
         # After rolling, the first sample is always empty, but we may wish to
