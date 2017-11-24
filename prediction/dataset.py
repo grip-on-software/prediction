@@ -146,8 +146,13 @@ class Dataset(object):
     def _roll(self, project_data):
         rolls = []
         for i in range(1, self.args.roll_sprints+1):
+            # Keep sprint numbers, roll all other features
             rolled_data = np.roll(project_data, i, axis=0)
+            rolled_data[:, self.SPRINT_KEY] = project_data[:, self.SPRINT_KEY]
+
+            # Mark earliest rolled values as missing
             rolled_data[:i, :] = np.nan
+
             rolls.append(rolled_data)
 
         return np.hstack(rolls)
