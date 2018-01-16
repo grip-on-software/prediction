@@ -234,7 +234,7 @@ class TFLearnRunner(Runner):
     def _get_input(self, datasets, data_set):
         # Enforce new graph
         datasets.clear_batches(data_set)
-        inputs, labels, weights = datasets.get_batches(data_set)
+        inputs, labels, weights = datasets.get_batches(data_set)[0:3]
         input_columns = {
             self._model.INPUT_COLUMN: inputs,
             self._model.WEIGHT_COLUMN: weights
