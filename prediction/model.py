@@ -6,7 +6,7 @@ import math
 import tensorflow as tf
 import keras.models as km
 import keras.layers as kl
-from .runner import TFRunner, TFLearnRunner, TFSKLRunner, KerasRunner
+from .runner import TFRunner, TFLearnRunner, TFSKLRunner, KerasRunner, FullTrainRunner
 
 class Model(object):
     """
@@ -242,6 +242,65 @@ class MultiLayerPerceptron(Model):
         optimizer = tf.train.GradientDescentOptimizer(self.args.learning_rate)
         #optimizer = tf.train.AdamOptimizer(self.args.learning_rate)
         return optimizer.minimize(loss, global_step=global_step)
+
+@Model.register('abe')
+class AnalogyBasedEstimation(Model):
+    """
+    Model that uses analogy-based estimation to predict an output
+    """
+
+    RUNNER = FullTrainRunner
+
+    def __init__(self, args, dtypes, sizes):
+        super(AnalogyBasedEstimation, self).__init__(args, dtypes, sizes)
+
+        # Placeholders for the full training set
+        self.train_inputs = tf.placeholder(dtype=dtypes[0],
+                                           shape=[None, self._num_features])
+        self.train_labels = tf.placeholder(dtype=dtypes[1], shape=[None])
+        self.features = tf.get_variable("abe_features",
+                                        shape=[self._num_features],
+                                        initializer=tf.ones_initializer,
+                                        trainable=False)
+
+        self.values = None
+        self.indices = None
+        self.labels = None
+
+    @classmethod
+    def add_arguments(cls, parser):
+        group = parser.add_argument_group('ABE', 'Analogy-based estimation')
+        group.add_argument('--num-k', dest='num_k', type=int,
+                           default=3, help='Number of neighbors to include')
+
+    def build(self):
+        # L2 Euclidean distance
+        left = tf.matmul(tf.expand_dims(tf.reduce_sum(tf.square(self.x_input),
+                                                      1), 1),
+                         tf.ones(shape=[1, tf.shape(self.train_inputs)[0]]))
+        right = tf.matmul(tf.reshape(tf.reduce_sum(tf.square(self.train_inputs),
+                                                   1), shape=[-1, 1]),
+                          tf.ones(shape=[self.args.batch_size, 1]),
+                          transpose_b=True)
+        distance = tf.subtract(tf.sqrt(tf.add(left, tf.transpose(right))),
+                               2 * tf.matmul(self.x_input,
+                                             self.train_inputs,
+                                             transpose_b=True))
+
+        # Take values and indices of lowest distances
+        self.values, self.indices = tf.nn.top_k(tf.negative(distance), k=self.args.num_k)
+        self.labels = tf.reshape(tf.gather(self.train_labels, self.indices),
+                                 [self.args.num_k, self.args.batch_size])
+        self._outputs = tf.transpose(tf.reduce_mean(self.labels, axis=0, keep_dims=True))
+
+        # No specialized train op yet; select indices within op
+        train_op = self._outputs
+        mmre = tf.reduce_mean(tf.divide(tf.abs(tf.subtract(self.y_labels,
+                                                           self._outputs)),
+                                        self.y_labels))
+
+        self._train_ops.append(train_op)
+        self._train_ops.append(mmre)
 
 class LearnModel(Model):
     """

@@ -213,6 +213,7 @@ class Classification(object):
             data_sets.get_batches(data_sets.TEST)
             data_sets.get_batches(data_sets.VALIDATION)
             if model.outputs is not None:
+                logging.info('%r', model.outputs)
                 pred = tf.argmax(model.outputs, 1)
                 correct = tf.equal(pred, model.y_labels)
                 accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))

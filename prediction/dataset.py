@@ -26,6 +26,7 @@ class Dataset(object):
     LABELS = 1
     WEIGHTS = 2
     WEATHER = 3
+    INDEXES = 3
 
     # Indexes in the original dataset of uniquely identifying keys
     PROJECT_KEY = 0
@@ -313,6 +314,7 @@ class Dataset(object):
                 inputs, labels, weights = [
                     tf.constant(item) for item in self.data_sets[data_set][0:3]
                 ]
+                indexes = tf.constant(range(len(self.data_sets[data_set][0])))
 
                 # Only loop through the ordered validation set once
                 if data_set == self.VALIDATION:
@@ -322,8 +324,8 @@ class Dataset(object):
                     num_epochs = self.args.num_epochs
                     shuffle = True
 
-                inputs, labels, weights = \
-                    tf.train.slice_input_producer([inputs, labels, weights],
+                inputs, labels, weights, indexes = \
+                    tf.train.slice_input_producer([inputs, labels, weights, indexes],
                                                   num_epochs=num_epochs,
                                                   shuffle=shuffle,
                                                   seed=self.args.seed)
@@ -337,20 +339,20 @@ class Dataset(object):
                         'threads_per_queue': self.args.num_threads
                     }
                     tensors, labels = \
-                        tf.contrib.training.stratified_sample([inputs, weights],
+                        tf.contrib.training.stratified_sample([inputs, weights, indexes],
                                                               labels,
                                                               target_prob,
                                                               self.args.batch_size,
                                                               **kwargs)
-                    inputs, weights = tensors
+                    inputs, weights, indexes = tensors
                 else:
-                    inputs, labels, weights = \
-                        tf.train.batch([inputs, labels, weights],
+                    inputs, labels, weights, indexes = \
+                        tf.train.batch([inputs, labels, weights, indexes],
                                        batch_size=self.args.batch_size,
                                        num_threads=self.args.num_threads,
                                        allow_smaller_final_batch=True)
 
-        self._batches[data_set] = [inputs, labels, weights]
+        self._batches[data_set] = [inputs, labels, weights, indexes]
         return self._batches[data_set]
 
     def clear_batches(self, data_set):

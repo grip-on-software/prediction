@@ -80,14 +80,18 @@ class TFRunner(Runner):
 
         self._summary_writer = tf.summary.FileWriter(self.args.train_directory,
                                                      self._session.graph)
+        self._indexes_placeholder = tf.placeholder(dtype=tf.int32,
+                                                   shape=[self.args.batch_size])
 
     def _build_feed(self, batch_ops):
-        batch_inputs, batch_labels, batch_weights = self._session.run(batch_ops)
+        batch_inputs, batch_labels, batch_weights, batch_indexes = \
+            self._session.run(batch_ops)
 
         return {
             self._model.x_input: batch_inputs,
             self._model.y_labels: batch_labels,
-            self._model.y_weights: batch_weights
+            self._model.y_weights: batch_weights,
+            self._indexes_placeholder: batch_indexes
         }
 
     def loop(self, datasets):
@@ -102,9 +106,7 @@ class TFRunner(Runner):
             while not self._coordinator.should_stop():
                 start_time = time.time()
 
-                batch_feed = self._build_feed(train_batch_ops)
-                train_values = self._session.run(self._model.train_ops,
-                                                 feed_dict=batch_feed)
+                batch_feed, train_values = self._train(train_batch_ops)
 
                 duration = time.time() - start_time
 
@@ -121,6 +123,12 @@ class TFRunner(Runner):
             logging.info("saving after %d steps", step)
             saver.save(self._session, self.args.train_directory,
                        global_step=step)
+
+    def _train(self, train_batch_ops):
+        batch_feed = self._build_feed(train_batch_ops)
+        train_values = self._session.run(self._model.train_ops,
+                                         feed_dict=batch_feed)
+        return batch_feed, train_values
 
     def _train_progress(self, step, batch_feed, train_values, duration):
         batch_size = len(batch_feed[self._model.x_input])
@@ -155,6 +163,7 @@ class TFRunner(Runner):
         else:
             f_score = 0.0
 
+        """
         logging.debug("w1: %r b1: %r",
                       self._model.weights1.eval(), self._model.biases1.eval())
         logging.debug("w2: %r b2: %r",
@@ -162,6 +171,7 @@ class TFRunner(Runner):
         logging.debug("wm: %r bm: %r",
                       self._model.weights_max.eval(),
                       self._model.biases_max.eval())
+        """
 
         logging.info("test accuracy: %.2f", accuracy)
         logging.info("precision: %.2f", precision)
@@ -186,6 +196,35 @@ class TFRunner(Runner):
         return {
             "labels": np.hstack(labels)
         }
+
+class FullTrainRunner(TFRunner):
+    """
+    Runner that provides the full training set to the model, in addition to
+    the usual train and test batches.
+    """
+
+    def __init__(self, args, session, model, test_ops):
+        super(FullTrainRunner, self).__init__(args, session, model, test_ops)
+        self._train_inputs = None
+        self._train_labels = None
+
+    def loop(self, datasets):
+        train = datasets.data_sets[datasets.TRAIN]
+        self._train_inputs = train[datasets.INPUTS]
+        self._train_labels = train[datasets.LABELS]
+        super(FullTrainRunner, self).loop(datasets)
+
+    def _build_feed(self, batch_ops):
+        feed_dict = super(FullTrainRunner, self)._build_feed(batch_ops)
+        feed_dict.update({
+            self._model.train_inputs: np.delete(self._train_inputs,
+                                                feed_dict[self._indexes_placeholder],
+                                                axis=0),
+            self._model.train_labels: np.delete(self._train_labels,
+                                                feed_dict[self._indexes_placeholder],
+                                                axis=0)
+        })
+        return feed_dict
 
 class TFLearnRunner(Runner):
     """
