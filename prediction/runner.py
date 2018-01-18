@@ -180,6 +180,8 @@ class TFRunner(Runner):
                       self._model.weights_max.eval(),
                       self._model.biases_max.eval())
         """
+        logging.info("real labels: %r", test_label)
+        logging.info("predictions: %r", pred)
 
         logging.info("test accuracy: %r", accuracy)
         logging.info("precision: %r", precision)
@@ -188,7 +190,7 @@ class TFRunner(Runner):
         logging.info("confusion:\n%r",
                      sklearn.metrics.confusion_matrix(test_label, pred))
 
-        return test_label
+        return pred
 
     def evaluate(self, datasets):
         validation_batch_ops = datasets.get_batches(datasets.VALIDATION)
@@ -224,13 +226,16 @@ class FullTrainRunner(TFRunner):
 
     def _build_feed(self, batch_ops):
         feed_dict = super(FullTrainRunner, self)._build_feed(batch_ops)
+        train_inputs = np.delete(self._train_inputs,
+                                 feed_dict[self._indexes_placeholder],
+                                 axis=0)
+        train_labels = np.delete(self._train_labels,
+                                 feed_dict[self._indexes_placeholder],
+                                 axis=0)
+
         feed_dict.update({
-            self._model.train_inputs: np.delete(self._train_inputs,
-                                                feed_dict[self._indexes_placeholder],
-                                                axis=0),
-            self._model.train_labels: np.delete(self._train_labels,
-                                                feed_dict[self._indexes_placeholder],
-                                                axis=0)
+            self._model.train_inputs: train_inputs,
+            self._model.train_labels: train_labels
         })
         return feed_dict
 
@@ -283,8 +288,8 @@ class TFLearnRunner(Runner):
                                           as_iterable=False)
 
         logging.info('Outputs: %r', outputs)
-        probabilities = np.choose(outputs[PredictionKey.CLASSES],
-                                  outputs[PredictionKey.PROBABILITIES].T)
+        probabilities = datasets.choose(outputs[PredictionKey.CLASSES],
+                                        outputs[PredictionKey.PROBABILITIES].T)
         risk = self._scale_logits(outputs[PredictionKey.LOGITS])
 
         return {

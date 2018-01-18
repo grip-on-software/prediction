@@ -224,6 +224,16 @@ class Dataset(object):
 
         return [dataset * scaler.scale_ + scaler.min_ for dataset in datasets]
 
+    @staticmethod
+    def choose(data, choices):
+        """
+        Variant of numpy.choose which does not limit the use of arrays with
+        a large dimension.
+        """
+
+        options = np.broadcast_to(choices, [len(data), len(choices)])
+        return options[range(len(data)), data]
+
     def _weight_classes(self, labels):
         # Provide rebalancing weights.
         train_labels = labels[self.TRAIN]
@@ -231,11 +241,7 @@ class Dataset(object):
         ratios = (counts / float(len(train_labels))).astype(np.float32)
         logging.debug('Ratios: %r', ratios)
 
-        weights = []
-        for set_labels in labels:
-            set_ratios = np.broadcast_to(ratios, (len(set_labels), len(ratios)))
-            weights.append(set_ratios[range(len(set_labels)), set_labels])
-
+        weights = [self.choose(set_labels, ratios) for set_labels in labels]
         return weights, ratios
 
     def _assemble_sets(self, dataset, labels, weather, validation):
