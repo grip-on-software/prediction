@@ -231,7 +231,7 @@ class Dataset(object):
         a large dimension.
         """
 
-        options = np.broadcast_to(choices, [len(data), len(choices)])
+        options = np.broadcast_to(choices, [data.shape[-1], choices.shape[-1]])
         return options[range(len(data)), data]
 
     def _weight_classes(self, labels):

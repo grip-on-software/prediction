@@ -288,8 +288,8 @@ class TFLearnRunner(Runner):
                                           as_iterable=False)
 
         logging.info('Outputs: %r', outputs)
-        probabilities = datasets.choose(outputs[PredictionKey.CLASSES],
-                                        outputs[PredictionKey.PROBABILITIES].T)
+        probabilities = datasets.choose(outputs[PredictionKey.CLASSES][np.newaxis, :],
+                                        outputs[PredictionKey.PROBABILITIES])
         risk = self._scale_logits(outputs[PredictionKey.LOGITS])
 
         return {
