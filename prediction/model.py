@@ -280,7 +280,7 @@ class AnalogyBasedEstimation(Model):
                          tf.ones(shape=[1, tf.shape(self.train_inputs)[0]]))
         right = tf.matmul(tf.reshape(tf.reduce_sum(tf.square(self.train_inputs),
                                                    1), shape=[-1, 1]),
-                          tf.ones(shape=[self.args.batch_size, 1]),
+                          tf.ones(shape=[tf.shape(self.x_input)[0], 1]),
                           transpose_b=True)
         distance = tf.subtract(tf.sqrt(tf.add(left, tf.transpose(right))),
                                2 * tf.matmul(self.x_input,
@@ -290,14 +290,16 @@ class AnalogyBasedEstimation(Model):
         # Take values and indices of lowest distances
         self.values, self.indices = tf.nn.top_k(tf.negative(distance), k=self.args.num_k)
         self.labels = tf.reshape(tf.gather(self.train_labels, self.indices),
-                                 [self.args.num_k, self.args.batch_size])
-        self._outputs = tf.transpose(tf.reduce_mean(self.labels, axis=0, keep_dims=True))
+                                 [self.args.num_k, tf.shape(self.x_input)[0]])
+        outputs = tf.transpose(tf.reduce_mean(self.labels, axis=0))
 
         # No specialized train op yet; select indices within op
+        self._outputs = tf.one_hot(outputs, self.num_labels)
         train_op = self._outputs
         mmre = tf.reduce_mean(tf.divide(tf.abs(tf.subtract(self.y_labels,
-                                                           self._outputs)),
-                                        self.y_labels))
+                                                           outputs)),
+                                        tf.clip_by_value(self.y_labels,
+                                                         1, self.num_labels)))
 
         self._train_ops.append(train_op)
         self._train_ops.append(mmre)

@@ -79,6 +79,9 @@ def get_parser():
                         help='Replace NaN values with a valid value')
     parser.add_argument('--weighted', default=False, action='store_true',
                         help='Model can use class weights for balancing')
+    parser.add_argument('--no-stratified-split', dest='stratified_split',
+                        default=True, action='store_false',
+                        help='Do not create proportionally balanced sets')
     parser.add_argument('--stratified-sample', dest='stratified_sample',
                         default=False, action='store_true',
                         help='Create proportionally balanced batches')

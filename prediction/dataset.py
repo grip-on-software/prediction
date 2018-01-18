@@ -231,14 +231,18 @@ class Dataset(object):
         ratios = (counts / float(len(train_labels))).astype(np.float32)
         logging.debug('Ratios: %r', ratios)
 
-        weights = [np.choose(set_labels, ratios) for set_labels in labels]
+        weights = []
+        for set_labels in labels:
+            set_ratios = np.broadcast_to(ratios, (len(set_labels), len(ratios)))
+            weights.append(set_ratios[range(len(set_labels)), set_labels])
+
         return weights, ratios
 
     def _assemble_sets(self, dataset, labels, weather, validation):
         train_data, test_data, train_labels, test_labels, train_weather, test_weather = \
             train_test_split(dataset, labels, weather,
                              test_size=self.args.test_size,
-                             stratify=labels)
+                             stratify=labels if self.args.stratified_split else None)
 
         validation_data, validation_labels = validation
         validation_weights = np.full(validation_labels.shape, 0.5)

@@ -87,6 +87,10 @@ class TFRunner(Runner):
         batch_inputs, batch_labels, batch_weights, batch_indexes = \
             self._session.run(batch_ops)
 
+        batch_indexes = np.pad(batch_indexes,
+                               (0, self.args.batch_size - len(batch_indexes)),
+                               'constant', constant_values=0)
+
         return {
             self._model.x_input: batch_inputs,
             self._model.y_labels: batch_labels,
@@ -156,10 +160,14 @@ class TFRunner(Runner):
                       self._session.run(self._model.outputs,
                                         feed_dict=test_feed))
 
-        precision = sklearn.metrics.precision_score(test_label, pred)
-        recall = sklearn.metrics.recall_score(test_label, pred)
-        if precision + recall != 0.0:
-            f_score = sklearn.metrics.f1_score(test_label, pred)
+        average_arg = 'binary' if self.args.binary else None
+        precision = sklearn.metrics.precision_score(test_label, pred,
+                                                    average=average_arg)
+        recall = sklearn.metrics.recall_score(test_label, pred,
+                                              average=average_arg)
+        if np.any(precision + recall != 0.0):
+            f_score = sklearn.metrics.f1_score(test_label, pred,
+                                               average=average_arg)
         else:
             f_score = 0.0
 
@@ -173,10 +181,10 @@ class TFRunner(Runner):
                       self._model.biases_max.eval())
         """
 
-        logging.info("test accuracy: %.2f", accuracy)
-        logging.info("precision: %.2f", precision)
-        logging.info("recall: %.2f", recall)
-        logging.info("f1: %.2f", f_score)
+        logging.info("test accuracy: %r", accuracy)
+        logging.info("precision: %r", precision)
+        logging.info("recall: %r", recall)
+        logging.info("f1: %r", f_score)
         logging.info("confusion:\n%r",
                      sklearn.metrics.confusion_matrix(test_label, pred))
 
