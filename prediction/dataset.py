@@ -4,11 +4,11 @@ TensorFlow ARFF dataset loader.
 
 import logging
 import tensorflow as tf
-import expression
 from scipy.io import arff
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+import expression
 from .files import get_file_opener
 
 class Dataset(object):
@@ -34,7 +34,13 @@ class Dataset(object):
 
     def __init__(self, args):
         self.args = args
+
+        self._full_data, self._meta = self._load()
+        self.data_sets = None
+        self.num_labels = None
+
         self.load_datasets()
+
         self._batches = {}
         self.ratios = None
 
@@ -87,39 +93,42 @@ class Dataset(object):
 
         return full_data, meta
 
-    def _select_data(self, full_data, meta):
-        name_translation = dict(zip(meta.names(), range(full_data.shape[1])))
+    def _select_data(self):
+        name_translation = dict(zip(self._meta.names(),
+                                    range(self._full_data.shape[1])))
 
         if self.args.index:
             indexes = set(self._translate(self.args.index, name_translation))
         else:
-            indexes = set(range(full_data.shape[1]))
+            indexes = set(range(self._full_data.shape[1]))
 
         indexes.discard(self.PROJECT_KEY)
         if self.args.remove:
             indexes -= set(self._translate(self.args.remove, name_translation))
 
         if self.args.label:
-            name_columns = dict(zip(meta.names(), full_data.T))
-            labels, label_indexes = self._get_labels(full_data, name_columns,
+            name_columns = dict(zip(self._meta.names(), self._full_data.T))
+            labels, label_indexes = self._get_labels(self._full_data,
+                                                     name_columns,
                                                      name_translation)
             indexes -= label_indexes
 
             logging.debug('Selected labels %r: %r', label_indexes, labels)
         else:
-            labels = np.random.randint(0, 1+1, size=(full_data.shape[0],))
+            logging.info('No labels selected, generating random 2-class labels')
+            labels = np.random.randint(0, 1+1, size=(self._full_data.shape[0],))
 
-        names = [name for index, name in enumerate(meta) if index in indexes]
+        names = [name for index, name in enumerate(self._meta) if index in indexes]
         logging.debug('Leftover indices: %r', indexes)
         logging.debug('Leftover column names: %r', names)
 
-        dataset = full_data[:, tuple(indexes)]
+        dataset = self._full_data[:, tuple(indexes)]
         if self.args.replace_na is not False:
             dataset[np.isnan(dataset)] = self.args.replace_na
 
-        projects = full_data[:, self.PROJECT_KEY]
+        projects = self._full_data[:, self.PROJECT_KEY]
         project_splits = np.squeeze(np.argwhere(np.diff(projects) != 0) + 1)
-        return dataset, labels, project_splits, full_data
+        return dataset, labels, project_splits
 
     @classmethod
     def _last_sprint_weather(cls, labels, project_splits):
@@ -156,24 +165,7 @@ class Dataset(object):
 
         return np.hstack(rolls)
 
-    def _roll_sprints(self, project_splits, dataset, labels, weather):
-        # Roll the sprints such that a sprint has features from the sprint
-        # before it, while the labels remain the same for that sprint.
-        # Remove the sprint at the start of a project in lack of features.
-        logging.debug('Project splits: %r', project_splits)
-
-        if self.args.roll_labels:
-            # Roll the labels of the previous sprint into the features of
-            # the current sprint, like how last sprint's weather classification
-            # has access to this label as well.
-            dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
-
-        # Validation data: original indexes in the dataset, features and labels
-        latest_indexes = np.hstack([project_splits-1, -1])
-        latest = dataset[latest_indexes, :]
-        previous = dataset[latest_indexes-1, :]
-        latest_labels = labels[latest_indexes]
-
+    def _trim_and_split(self, project_splits, dataset, labels):
         # After rolling, the first sample is always empty, but we may wish to
         # keep samples with only a few sprints worth of features.
         trim_start = 1 if self.args.keep_incomplete else self.args.roll_sprints
@@ -203,17 +195,46 @@ class Dataset(object):
         if self.args.roll_validation:
             split_mask[project_splits-2] = False
             split_mask[-2] = False
-            # Reobtain validation features after the roll is completed
-            # Do not alter the indexes because the context from the full data
-            # remains the same.
-            latest = previous
+
+        return split_mask, dataset
+
+    def _roll_sprints(self, project_splits, dataset, labels, weather):
+        # Roll the sprints such that a sprint has features from the sprint
+        # before it, while the labels remain the same for that sprint.
+        # Remove the sprint at the start of a project in lack of features.
+        logging.debug('Project splits: %r', project_splits)
+
+        if self.args.roll_labels:
+            # Roll the labels of the previous sprint into the features of
+            # the current sprint, like how last sprint's weather classification
+            # has access to this label as well.
+            dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
+
+        # Validation data: original indexes in the dataset, features and labels
+        latest_indexes = np.hstack([project_splits-1, -1])
+
+        # Obtain the correct validation rows based on whether validation
+        # features are rolled.
+        # Do not alter the indexes because the context from the full data
+        # remains the same. Labels are also not rolled.
+        if self.args.roll_validation:
+            latest_data = dataset[latest_indexes, :]
+        else:
+            latest_data = dataset[latest_indexes-1, :]
+
+        latest_labels = labels[latest_indexes]
+
+        split_mask, dataset = self._trim_and_split(project_splits, dataset,
+                                                   labels)
 
         logging.debug('%r', split_mask)
 
         labels = labels[split_mask]
         weather = weather[split_mask]
+        latest_weights = np.full(latest_labels.shape, 0.5)
+        latest = (latest_data, latest_labels, latest_weights, latest_indexes)
 
-        return dataset, labels, weather, latest, latest_labels, latest_indexes
+        return dataset, labels, weather, latest
 
     def _scale(self, datasets):
         # Scale the data to an appropriate normalized scale [0, 1) suitable for
@@ -250,11 +271,8 @@ class Dataset(object):
                              test_size=self.args.test_size,
                              stratify=labels if self.args.stratified_split else None)
 
-        validation_data, validation_labels = validation
-        validation_weights = np.full(validation_labels.shape, 0.5)
-
         train_data, test_data, validation_data = \
-            self._scale([train_data, test_data, validation_data])
+            self._scale([train_data, test_data, validation[self.INPUTS]])
 
         weights, self.ratios = \
             self._weight_classes([train_labels, test_labels])
@@ -262,7 +280,8 @@ class Dataset(object):
         return [
             (train_data, train_labels, weights[self.TRAIN], train_weather),
             (test_data, test_labels, weights[self.TEST], test_weather),
-            (validation_data, validation_labels, validation_weights, 0)
+            (validation_data, validation[self.LABELS],
+             validation[self.WEIGHTS], validation[self.INDEXES])
         ]
 
     def load_datasets(self):
@@ -270,22 +289,20 @@ class Dataset(object):
         Load the dataset and split into train/test, and inputs/labels.
         """
 
-        dataset, labels, project_splits, full_data = \
-            self._select_data(*self._load())
+        dataset, labels, project_splits = self._select_data()
 
         weather = self._last_sprint_weather_accuracy(labels, project_splits,
                                                      name='full dataset')[0]
 
         if self.args.roll_sprints > 0:
-            dataset, labels, weather, validation_data, validation_labels, validation_indexes = \
+            dataset, labels, weather, validation = \
                 self._roll_sprints(project_splits, dataset, labels, weather)
         else:
-            validation_data = np.empty(0)
-            validation_labels = np.empty(0)
+            logging.info('Cannot generate a validation set by rolling sprints')
+            validation = (np.empty(0), np.empty(0), np.empty(0), np.empty(0))
 
         train, test, validation = \
-            self._assemble_sets(dataset, labels, weather,
-                                (validation_data, validation_labels))
+            self._assemble_sets(dataset, labels, weather, validation)
 
         self._last_sprint_weather_accuracy(train[self.LABELS],
                                            weather=train[self.WEATHER],
@@ -300,12 +317,28 @@ class Dataset(object):
             self.VALIDATION: validation
         }
 
-        self.validation_context = full_data[validation_indexes, :]
         logging.info('Validation sprints: %r',
                      self.validation_context[:, (self.PROJECT_KEY, self.SPRINT_KEY)])
 
-        self.num_features = train[self.INPUTS].shape[1]
         self.num_labels = max(labels) + 1
+
+    @property
+    def num_features(self):
+        """
+        Retrieve the number of features in the data set.
+        """
+
+        return self.data_sets[self.TRAIN][self.INPUTS].shape[1]
+
+    @property
+    def validation_context(self):
+        """
+        Retrieve the original samples from the data set from which the
+        validation set is derived. This contains all feature/label columns.
+        """
+
+        validation_indexes = self.data_sets[self.VALIDATION][self.INDEXES]
+        return self._full_data[validation_indexes, :]
 
     def get_batches(self, data_set):
         """

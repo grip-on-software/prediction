@@ -174,15 +174,12 @@ class Classification(object):
             results = runner.evaluate(data_sets)
             self._export_results(data_sets, results)
 
-    def main(self, _):
-        """
-        Main entry point.
-        """
-
+    def _clean(self):
         if self.args.clean:
             cleaner = Cleaner(self.args.clean_patterns)
             cleaner.clean(self.args.train_directory)
 
+    def _setup(self):
         logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s',
                             level=getattr(logging, self.args.log.upper(), None))
         logging.getLogger('tensorflow').propagate = False
@@ -191,8 +188,7 @@ class Classification(object):
             random.seed(self.args.seed)
             np.random.seed(self.args.seed)
 
-        data_sets = Dataset(self.args)
-
+    def _run(self, data_sets):
         # Tell TensorFlow that the model will be built into the default Graph.
         with tf.Graph().as_default():
             if self.args.seed is not None:
@@ -226,6 +222,16 @@ class Classification(object):
 
             if not self.args.dry:
                 self.run_session(model, [accuracy, pred], data_sets)
+
+    def main(self, _):
+        """
+        Main entry point.
+        """
+
+        self._setup()
+
+        data_sets = Dataset(self.args)
+        self._run(data_sets)
 
 def bootstrap():
     """
