@@ -30,6 +30,8 @@ def get_parser():
                         help='Attribute indexes to use from the dataset')
     parser.add_argument('--remove', default=None, nargs='*',
                         help='Attribute indexes to ignore from the dataset')
+    parser.add_argument('--combinations', default=False, type=int, nargs='?',
+                        const=3, help='Make combinations of number of attributes')
     parser.add_argument('--label', default=None,
                         help='Attribute to use instead as label')
     parser.add_argument('--binary', default=None, type=float, nargs='?',
@@ -228,10 +230,24 @@ class Classification(object):
         Main entry point.
         """
 
+        self._clean()
         self._setup()
 
         data_sets = Dataset(self.args)
         self._run(data_sets)
+
+        if self.args.combinations:
+            stop = False
+            while not stop:
+                try:
+                    self._clean()
+                    data_sets.clear_batches(data_sets.TRAIN)
+                    data_sets.clear_batches(data_sets.TEST)
+                    data_sets.clear_batches(data_sets.VALIDATION)
+                    data_sets.load_datasets()
+                    self._run(data_sets)
+                except StopIteration:
+                    stop = True
 
 def bootstrap():
     """

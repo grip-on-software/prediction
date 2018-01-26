@@ -2,6 +2,7 @@
 TensorFlow ARFF dataset loader.
 """
 
+import itertools
 import logging
 import tensorflow as tf
 from scipy.io import arff
@@ -36,6 +37,7 @@ class Dataset(object):
         self.args = args
 
         self._full_data, self._meta = self._load()
+        self._combinations = None
         self.data_sets = None
         self.num_labels = None
 
@@ -93,6 +95,13 @@ class Dataset(object):
 
         return full_data, meta
 
+    def _select_combination(self, indexes):
+        if self._combinations is None:
+            self._combinations = itertools.combinations(indexes,
+                                                        self.args.combinations)
+
+        return next(self._combinations)
+
     def _select_data(self):
         name_translation = dict(zip(self._meta.names(),
                                     range(self._full_data.shape[1])))
@@ -121,6 +130,10 @@ class Dataset(object):
         names = [name for index, name in enumerate(self._meta) if index in indexes]
         logging.debug('Leftover indices: %r', indexes)
         logging.debug('Leftover column names: %r', names)
+
+        if self.args.combinations:
+            indexes = self._select_combination(indexes)
+            logging.debug('Selected combination: %r', indexes)
 
         dataset = self._full_data[:, tuple(indexes)]
         if self.args.replace_na is not False:
@@ -258,7 +271,7 @@ class Dataset(object):
     def _weight_classes(self, labels):
         # Provide rebalancing weights.
         train_labels = labels[self.TRAIN]
-        counts = np.bincount(train_labels)
+        counts = np.bincount(train_labels, minlength=self.num_labels)
         ratios = (counts / float(len(train_labels))).astype(np.float32)
         logging.debug('Ratios: %r', ratios)
 
@@ -301,6 +314,8 @@ class Dataset(object):
             logging.info('Cannot generate a validation set by rolling sprints')
             validation = (np.empty(0), np.empty(0), np.empty(0), np.empty(0))
 
+        self.num_labels = max(labels) + 1
+
         train, test, validation = \
             self._assemble_sets(dataset, labels, weather, validation)
 
@@ -319,8 +334,6 @@ class Dataset(object):
 
         logging.info('Validation sprints: %r',
                      self.validation_context[:, (self.PROJECT_KEY, self.SPRINT_KEY)])
-
-        self.num_labels = max(labels) + 1
 
     @property
     def num_features(self):

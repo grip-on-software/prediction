@@ -273,19 +273,25 @@ class AnalogyBasedEstimation(Model):
         group.add_argument('--num-k', dest='num_k', type=int,
                            default=3, help='Number of neighbors to include')
 
-    def build(self):
+    def _l2_distance(self, batch_input, train_inputs):
         # L2 Euclidean distance
-        left = tf.matmul(tf.expand_dims(tf.reduce_sum(tf.square(self.x_input),
+        left = tf.matmul(tf.expand_dims(tf.reduce_sum(tf.square(batch_input),
                                                       1), 1),
-                         tf.ones(shape=[1, tf.shape(self.train_inputs)[0]]))
-        right = tf.matmul(tf.reshape(tf.reduce_sum(tf.square(self.train_inputs),
+                         tf.ones(shape=[1, tf.shape(train_inputs)[0]]))
+
+        right = tf.matmul(tf.reshape(tf.reduce_sum(tf.square(train_inputs),
                                                    1), shape=[-1, 1]),
-                          tf.ones(shape=[tf.shape(self.x_input)[0], 1]),
+                          tf.ones(shape=[tf.shape(batch_input)[0], 1]),
                           transpose_b=True)
-        distance = tf.subtract(tf.sqrt(tf.add(left, tf.transpose(right))),
-                               2 * tf.matmul(self.x_input,
-                                             self.train_inputs,
-                                             transpose_b=True))
+
+        return tf.subtract(tf.sqrt(tf.add(left, tf.transpose(right))),
+                           2 * tf.matmul(self.x_input, self.train_inputs,
+                                         transpose_b=True))
+
+    def build(self):
+        weighted_inputs = tf.multiply(self.features, self.train_inputs)
+
+        distance = self._l2_distance(self.x_input, weighted_inputs)
 
         # Take values and indices of lowest distances
         self.values, self.indices = tf.nn.top_k(tf.negative(distance), k=self.args.num_k)
