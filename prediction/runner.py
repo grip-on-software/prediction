@@ -78,8 +78,9 @@ class TFRunner(Runner):
         # Build the summary operation based on the collection of summaries.
         self._summary_op = tf.summary.merge_all()
 
-        self._summary_writer = tf.summary.FileWriter(self.args.train_directory,
-                                                     self._session.graph)
+        if self._summary_op is None:
+            logging.info('No summaries')
+
         self._indexes_placeholder = tf.placeholder(dtype=tf.int32,
                                                    shape=[self.args.batch_size])
 
@@ -100,7 +101,10 @@ class TFRunner(Runner):
 
     def loop(self, datasets):
         # Create a saver for writing training checkpoints.
-        saver = tf.train.Saver(max_to_keep=self.args.num_checkpoints)
+        if self.args.save:
+            saver = tf.train.Saver(max_to_keep=self.args.num_checkpoints)
+        else:
+            saver = None
 
         train_batch_ops = datasets.get_batches(datasets.TRAIN)
         test_batch_ops = datasets.get_batches(datasets.TEST)
@@ -124,9 +128,10 @@ class TFRunner(Runner):
 
                 step = step + 1
         except tf.errors.OutOfRangeError:
-            logging.info("saving after %d steps", step)
-            saver.save(self._session, self.args.train_directory,
-                       global_step=step)
+            logging.info("Done after %d steps", step)
+            if saver is not None:
+                saver.save(self._session, self.args.train_directory,
+                           global_step=step)
 
     def _train(self, train_batch_ops):
         batch_feed = self._build_feed(train_batch_ops)
@@ -141,8 +146,11 @@ class TFRunner(Runner):
         logging.info("step %d (%d samples): loss value %.2f (%.3f sec)", step,
                      batch_size, loss, duration)
 
-        summary_str = self._session.run(self._summary_op, feed_dict=batch_feed)
-        self._summary_writer.add_summary(summary_str, step)
+        if self._summary_op is None:
+            summary_str = self._session.run(self._summary_op,
+                                            feed_dict=batch_feed)
+            writer = tf.summary.FileWriterCache.get(self.args.train_directory)
+            writer.add_summary(summary_str, step)
 
         accuracy = self._session.run(self._test_ops, feed_dict=batch_feed)[0]
         logging.info("train accuracy: %.2f", accuracy)
@@ -150,8 +158,10 @@ class TFRunner(Runner):
     def _test_progress(self, saver, step, test_feed):
         self._validate(test_feed)
 
-        logging.info("saving training state")
-        saver.save(self._session, self.args.train_directory, global_step=step)
+        if saver is not None:
+            logging.info("saving training state")
+            saver.save(self._session, self.args.train_directory,
+                       global_step=step)
 
     def _validate(self, test_feed):
         test_label = test_feed[self._model.y_labels]
