@@ -58,13 +58,14 @@ class Dataset(object):
                 else:
                     raise ValueError('Index {0} could not be understood'.format(index))
 
-    def _get_labels(self, data, columns, translation):
-        parser = expression.Expression_Parser(variables=columns)
+    def _get_labels(self, columns, translation):
+        parser = expression.Expression_Parser(variables=columns,
+                                              functions={'round': np.round})
         column = parser.parse(self.args.label)
         label_indexes = set()
         if isinstance(column, int):
             label_indexes.add(column)
-            column = data[:, column]
+            column = self._full_data[:, column]
         elif not isinstance(column, np.ndarray):
             raise TypeError("Invalid label {0}: {1!r}".format(self.args.label,
                                                               type(column)))
@@ -82,6 +83,26 @@ class Dataset(object):
             raise ValueError('Label {0} produced non-round numbers'.format(self.args.label))
 
         return labels, label_indexes
+
+    def _get_assignments(self, num_columns, name_columns, indexes):
+        new_columns = []
+        parser = expression.Expression_Parser(variables=name_columns,
+                                              assignment=True)
+        for assignment in self.args.assign:
+            parser.parse(assignment)
+            if not parser.modified_variables:
+                raise NameError('Expression must produce assignment')
+
+            values = parser.modified_variables.values()
+            if not all(isinstance(value, np.ndarray) for value in values):
+                raise TypeError("Invalid assignment {}".format(assignment))
+
+            new_columns.extend(values)
+            indexes.update(range(num_columns, num_columns + len(values)))
+            num_columns += len(values)
+
+        full_data = np.hstack([self._full_data, np.array(new_columns).T])
+        return full_data, num_columns
 
     def _load(self):
         file_opener = get_file_opener(self.args)
@@ -103,13 +124,13 @@ class Dataset(object):
         return next(self._combinations)
 
     def _select_data(self):
-        name_translation = dict(zip(self._meta.names(),
-                                    range(self._full_data.shape[1])))
+        num_columns = self._full_data.shape[1]
+        name_translation = dict(zip(self._meta.names(), range(num_columns)))
 
         if self.args.index:
             indexes = set(self._translate(self.args.index, name_translation))
         else:
-            indexes = set(range(self._full_data.shape[1]))
+            indexes = set(range(num_columns))
 
         indexes.discard(self.PROJECT_KEY)
         if self.args.remove:
@@ -117,8 +138,7 @@ class Dataset(object):
 
         if self.args.label:
             name_columns = dict(zip(self._meta.names(), self._full_data.T))
-            labels, label_indexes = self._get_labels(self._full_data,
-                                                     name_columns,
+            labels, label_indexes = self._get_labels(name_columns,
                                                      name_translation)
             indexes -= label_indexes
 
@@ -131,11 +151,18 @@ class Dataset(object):
         logging.debug('Leftover indices: %r', indexes)
         logging.debug('Leftover column names: %r', names)
 
+        if self.args.assign:
+            full_data, num_columns = self._get_assignments(num_columns,
+                                                           name_columns,
+                                                           indexes)
+        else:
+            full_data = self._full_data
+
         if self.args.combinations:
             indexes = self._select_combination(indexes)
             logging.debug('Selected combination: %r', indexes)
 
-        dataset = self._full_data[:, tuple(indexes)]
+        dataset = full_data[:, tuple(indexes)]
         if self.args.replace_na is not False:
             dataset[np.isnan(dataset)] = self.args.replace_na
 
@@ -178,16 +205,18 @@ class Dataset(object):
 
         return np.hstack(rolls)
 
-    def _trim_and_split(self, project_splits, dataset, labels):
+    def _get_splits(self, project_splits, dataset):
+        # Get rolled splits
+        return [self._roll(p) for p in np.split(dataset, project_splits)]
+
+    def _trim(self, projects):
         # After rolling, the first sample is always empty, but we may wish to
         # keep samples with only a few sprints worth of features.
         trim_start = 1 if self.args.keep_incomplete else self.args.roll_sprints
         trim_end = -2 if self.args.roll_validation else -1
-        dataset = np.vstack([
-            self._roll(p)[trim_start:trim_end]
-            for p in np.split(dataset, project_splits)
-        ])
+        return np.vstack([p[trim_start:trim_end] for p in projects])
 
+    def _get_split_mask(self, project_splits, labels):
         split_mask = np.ones(len(labels), np.bool)
 
         # Remove labels and weather data from the normal train/test dataset for
@@ -209,7 +238,7 @@ class Dataset(object):
             split_mask[project_splits-2] = False
             split_mask[-2] = False
 
-        return split_mask, dataset
+        return split_mask
 
     def _roll_sprints(self, project_splits, dataset, labels, weather):
         # Roll the sprints such that a sprint has features from the sprint
@@ -225,20 +254,21 @@ class Dataset(object):
 
         # Validation data: original indexes in the dataset, features and labels
         latest_indexes = np.hstack([project_splits-1, -1])
+        projects = self._get_splits(project_splits, dataset)
 
         # Obtain the correct validation rows based on whether validation
         # features are rolled.
         # Do not alter the indexes because the context from the full data
         # remains the same. Labels are also not rolled.
         if self.args.roll_validation:
-            latest_data = dataset[latest_indexes, :]
+            latest_data = np.vstack([p[-1, :] for p in projects])
         else:
-            latest_data = dataset[latest_indexes-1, :]
+            latest_data = np.vstack([p[-2, :] for p in projects])
 
         latest_labels = labels[latest_indexes]
 
-        split_mask, dataset = self._trim_and_split(project_splits, dataset,
-                                                   labels)
+        dataset = self._trim(projects)
+        split_mask = self._get_split_mask(project_splits, labels)
 
         logging.debug('%r', split_mask)
 
