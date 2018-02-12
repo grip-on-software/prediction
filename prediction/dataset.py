@@ -12,39 +12,18 @@ from sklearn.preprocessing import MinMaxScaler
 import expression
 from .files import get_file_opener
 
-class Dataset(object):
+class Loader(object):
     """
-    Dataset selector and provider.
+    Dataset loader.
     """
-
-    # Indexes of the prepurposed data sets in the data_sets variable
-    TRAIN = 0
-    TEST = 1
-    VALIDATION = 2
-
-    # Indexes of the inputs, labels and other column data in each data set
-    INPUTS = 0
-    LABELS = 1
-    WEIGHTS = 2
-    WEATHER = 3
-    INDEXES = 3
-
-    # Indexes in the original dataset of uniquely identifying keys
-    PROJECT_KEY = 0
-    SPRINT_KEY = 1
 
     def __init__(self, args):
         self.args = args
 
         self._full_data, self._meta = self._load()
+        self._indexes, self._labels = self._calculate_indexes()
+        self._selected_data = None
         self._combinations = None
-        self.data_sets = None
-        self.num_labels = None
-
-        self.load_datasets()
-
-        self._batches = {}
-        self.ratios = None
 
     def _translate(self, indices, translation):
         for index in indices:
@@ -54,7 +33,8 @@ class Dataset(object):
                 if index in translation:
                     yield translation[index]
                 elif ',' in index:
-                    self._translate(index.split(','), translation)
+                    for idx in self._translate(index.split(','), translation):
+                        yield idx
                 else:
                     raise ValueError('Index {0} could not be understood'.format(index))
 
@@ -84,9 +64,10 @@ class Dataset(object):
 
         return labels, label_indexes
 
-    def _get_assignments(self, num_columns, name_columns, indexes):
+    def _get_assignments(self, indexes):
+        num_columns = self.num_columns
         new_columns = []
-        parser = expression.Expression_Parser(variables=name_columns,
+        parser = expression.Expression_Parser(variables=self.name_columns,
                                               assignment=True)
         for assignment in self.args.assign:
             parser.parse(assignment)
@@ -123,22 +104,20 @@ class Dataset(object):
 
         return next(self._combinations)
 
-    def _select_data(self):
-        num_columns = self._full_data.shape[1]
-        name_translation = dict(zip(self._meta.names(), range(num_columns)))
+    def _calculate_indexes(self):
+        name_translation = dict(zip(self.names, range(self.num_columns)))
 
         if self.args.index:
             indexes = set(self._translate(self.args.index, name_translation))
         else:
-            indexes = set(range(num_columns))
+            indexes = set(range(self.num_columns))
 
-        indexes.discard(self.PROJECT_KEY)
+        indexes.discard(Dataset.PROJECT_KEY)
         if self.args.remove:
             indexes -= set(self._translate(self.args.remove, name_translation))
 
         if self.args.label:
-            name_columns = dict(zip(self._meta.names(), self._full_data.T))
-            labels, label_indexes = self._get_labels(name_columns,
+            labels, label_indexes = self._get_labels(self.name_columns,
                                                      name_translation)
             indexes -= label_indexes
 
@@ -152,23 +131,111 @@ class Dataset(object):
         logging.debug('Leftover column names: %r', names)
 
         if self.args.assign:
-            full_data, num_columns = self._get_assignments(num_columns,
-                                                           name_columns,
-                                                           indexes)
-        else:
-            full_data = self._full_data
+            self._full_data = self._get_assignments(indexes)[0]
+
+        return indexes, labels
+
+    @property
+    def full_data(self):
+        """
+        Retrieve the full unfiltered data set.
+        """
+
+        return self._full_data
+
+    @property
+    def indexes(self):
+        """
+        Retrieve the set of indexes of selected attributes, before selecting
+        combinations of those attributes.
+        """
+
+        return self._indexes
+
+    @property
+    def names(self):
+        """
+        Retrieve the attribute names.
+        """
+
+        return self._meta.names()
+
+    @property
+    def num_columns(self):
+        """
+        Retrieve the number of attributes in the unfiltered data set.
+        """
+
+        return self._full_data.shape[1]
+
+    @property
+    def name_columns(self):
+        """
+        Retrieve a dictionary of names and column arrays of the attributes
+        in the unfiltered data set.
+        """
+
+        return dict(zip(self.names, self._full_data.T))
+
+    @property
+    def project_splits(self):
+        """
+        Retrieve the indexes of the samples in the data set at which a new
+        project is introduced. Assumes that the data set is ordered on
+        project identifier.
+        """
+
+        projects = self._full_data[:, Dataset.PROJECT_KEY]
+        return np.squeeze(np.argwhere(np.diff(projects) != 0) + 1)
+
+    def select_data(self):
+        """
+        Retrieve the dataset and labels based on selection criteria.
+        """
 
         if self.args.combinations:
-            indexes = self._select_combination(indexes)
-            logging.debug('Selected combination: %r', indexes)
+            indexes = self._select_combination(self._indexes)
+        else:
+            indexes = self._indexes
 
-        dataset = full_data[:, tuple(indexes)]
+        logging.debug('Selected combination of indexes: %r', indexes)
+        dataset = self._full_data[:, tuple(indexes)]
         if self.args.replace_na is not False:
             dataset[np.isnan(dataset)] = self.args.replace_na
+        return dataset, self._labels
 
-        projects = self._full_data[:, self.PROJECT_KEY]
-        project_splits = np.squeeze(np.argwhere(np.diff(projects) != 0) + 1)
-        return dataset, labels, project_splits
+class Dataset(object):
+    """
+    Dataset selector and provider.
+    """
+
+    # Indexes of the prepurposed data sets in the data_sets variable
+    TRAIN = 0
+    TEST = 1
+    VALIDATION = 2
+
+    # Indexes of the inputs, labels and other column data in each data set
+    INPUTS = 0
+    LABELS = 1
+    WEIGHTS = 2
+    WEATHER = 3
+    INDEXES = 3
+
+    # Indexes in the original dataset of uniquely identifying keys
+    PROJECT_KEY = 0
+    SPRINT_KEY = 1
+
+    def __init__(self, args):
+        self.args = args
+
+        self.data_sets = None
+        self.num_labels = None
+
+        self._loader = Loader(self.args)
+        self.load_datasets()
+
+        self._batches = {}
+        self.ratios = None
 
     @classmethod
     def _last_sprint_weather(cls, labels, project_splits):
@@ -332,7 +399,8 @@ class Dataset(object):
         Load the dataset and split into train/test, and inputs/labels.
         """
 
-        dataset, labels, project_splits = self._select_data()
+        dataset, labels = self._loader.select_data()
+        project_splits = self._loader.project_splits
 
         weather = self._last_sprint_weather_accuracy(labels, project_splits,
                                                      name='full dataset')[0]
@@ -381,7 +449,7 @@ class Dataset(object):
         """
 
         validation_indexes = self.data_sets[self.VALIDATION][self.INDEXES]
-        return self._full_data[validation_indexes, :]
+        return self._loader.full_data[validation_indexes, :]
 
     def get_batches(self, data_set):
         """
@@ -402,7 +470,7 @@ class Dataset(object):
                 ]
                 indexes = tf.constant(range(len(self.data_sets[data_set][0])))
 
-                # Only loop through the ordered validation set once
+                # Only loop through the validation set once and remain order.
                 if data_set == self.VALIDATION:
                     num_epochs = 1
                     shuffle = False
