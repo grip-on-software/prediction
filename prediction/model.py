@@ -243,6 +243,27 @@ class MultiLayerPerceptron(Model):
         #optimizer = tf.train.AdamOptimizer(self.args.learning_rate)
         return optimizer.minimize(loss, global_step=global_step)
 
+def cosine_distance(args, batch_input, train_inputs):
+    left = tf.nn.l2_normalize(batch_input, 1)
+    right = tf.nn.l2_normalize(train_inputs, 1)
+    return tf.matmul(left, right, adjoint_b=True)
+
+def minkowsky_distance(args, batch_input, train_inputs):
+    exp = tf.constant(args.exponent, dtype=tf.float32)
+    left = tf.matmul(tf.expand_dims(tf.reduce_sum(tf.pow(batch_input, exp),
+                                                  1), 1),
+                     tf.ones(shape=[1, tf.shape(train_inputs)[0]]))
+
+    right = tf.matmul(tf.reshape(tf.reduce_sum(tf.pow(train_inputs, exp),
+                                               1), shape=[-1, 1]),
+                      tf.ones(shape=[tf.shape(batch_input)[0], 1]),
+                      transpose_b=True)
+
+    return tf.subtract(tf.pow(tf.add(left, tf.transpose(right)),
+                              tf.reciprocal(exp)),
+                       2 * tf.matmul(batch_input, train_inputs,
+                                     transpose_b=True))
+
 @Model.register('abe')
 class AnalogyBasedEstimation(Model):
     """
@@ -250,6 +271,10 @@ class AnalogyBasedEstimation(Model):
     """
 
     RUNNER = FullTrainRunner
+    _distances = {
+        'cosine': cosine_distance,
+        'minkowsky': minkowsky_distance
+    }
 
     def __init__(self, args, dtypes, sizes):
         super(AnalogyBasedEstimation, self).__init__(args, dtypes, sizes)
@@ -272,26 +297,19 @@ class AnalogyBasedEstimation(Model):
         group = parser.add_argument_group('ABE', 'Analogy-based estimation')
         group.add_argument('--num-k', dest='num_k', type=int,
                            default=3, help='Number of neighbors to include')
+        group.add_argument('--pred', type=float, default=0.25,
+                           help='Percentage of tolerance from actual value')
+        group.add_argument('--distance', choices=cls._distances.keys(),
+                           default='minkowsky', help='Distance measure to use')
+        group.add_argument('--exponent', type=float, default=2.0,
+                           help='Exponent of Minkowsky L-P distance measure')
 
-    def _l2_distance(self, batch_input, train_inputs):
-        # L2 Euclidean distance
-        left = tf.matmul(tf.expand_dims(tf.reduce_sum(tf.square(batch_input),
-                                                      1), 1),
-                         tf.ones(shape=[1, tf.shape(train_inputs)[0]]))
-
-        right = tf.matmul(tf.reshape(tf.reduce_sum(tf.square(train_inputs),
-                                                   1), shape=[-1, 1]),
-                          tf.ones(shape=[tf.shape(batch_input)[0], 1]),
-                          transpose_b=True)
-
-        return tf.subtract(tf.sqrt(tf.add(left, tf.transpose(right))),
-                           2 * tf.matmul(self.x_input, self.train_inputs,
-                                         transpose_b=True))
 
     def build(self):
         weighted_inputs = tf.multiply(self.features, self.train_inputs)
 
-        distance = self._l2_distance(self.x_input, weighted_inputs)
+        measure = self._distances[self.args.distance]
+        distance = measure(self.args, self.x_input, weighted_inputs)
 
         # Take values and indices of lowest distances
         self.values, self.indices = tf.nn.top_k(tf.negative(distance), k=self.args.num_k)
@@ -301,14 +319,11 @@ class AnalogyBasedEstimation(Model):
 
         # No specialized train op yet; select indices within op
         self._outputs = tf.one_hot(outputs, self.num_labels)
-        train_op = self._outputs
-        mmre = tf.reduce_mean(tf.divide(tf.abs(tf.subtract(self.y_labels,
-                                                           outputs)),
-                                        tf.clip_by_value(self.y_labels,
-                                                         1, self.num_labels)))
 
-        self._train_ops.append(train_op)
-        self._train_ops.append(mmre)
+        pred = tf.divide(tf.reduce_sum(tf.cast(tf.less(magnitude, self.args.pred), tf.int32)), tf.shape(self.y_labels)[0])
+
+        self._train_ops.append(distance)
+        self._train_ops.append(pred)
 
 class LearnModel(Model):
     """
