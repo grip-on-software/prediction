@@ -2,10 +2,12 @@
 TensorFlow prediction models.
 """
 
+import logging
 import math
 import tensorflow as tf
 import keras.models as km
 import keras.layers as kl
+from .dataset import Dataset
 from .runner import TFRunner, TFEstimatorRunner, TFSKLRunner, KerasRunner, FullTrainRunner
 
 class Model(object):
@@ -138,6 +140,36 @@ class Model(object):
 
         raise NotImplementedError('Must be implemented by subclasses')
 
+    def log_evaluation(self, session, feed_dict):
+        """
+        Provide logging output describing model internals after performing
+        a test or validation operation to show the model's state. Member
+        variables relevated to that op may be logged, but no new operations
+        are to be run.
+        """
+
+        pass
+
+    @property
+    def validation_results(self):
+        """
+        Provide additional tensors containing results that the model has in
+        addition to the data that the runner obtains through prediction after
+        a validation operation. Member variables relevated to that op may be
+        provided in a dictionary.
+        """
+
+        return {}
+
+    @property
+    def validation_metadata(self):
+        """
+        Provide a dictionary of the same shape as `alidation_results`
+        which describes what kind of results are returned.
+        """
+
+        return {}
+
 @Model.register('mlp')
 class MultiLayerPerceptron(Model):
     """
@@ -243,6 +275,17 @@ class MultiLayerPerceptron(Model):
         #optimizer = tf.train.AdamOptimizer(self.args.learning_rate)
         return optimizer.minimize(loss, global_step=global_step)
 
+    def log_evaluation(self, session, feed_dict):
+        logging.debug("w1: %r b1: %r",
+                      session.run(self.weights1, feed_dict=feed_dict),
+                      session.run(self.biases1, feed_dict=feed_dict))
+        logging.debug("w2: %r b2: %r",
+                      session.run(self.weights2, feed_dict=feed_dict),
+                      session.run(self.biases2, feed_dict=feed_dict))
+        logging.debug("wm: %r bm: %r",
+                      session.run(self.weights_max, feed_dict=feed_dict),
+                      session.run(self.biases_max, feed_dict=feed_dict))
+
 def cosine_distance(args, batch_input, train_inputs):
     left = tf.nn.l2_normalize(batch_input, 1)
     right = tf.nn.l2_normalize(train_inputs, 1)
@@ -304,7 +347,6 @@ class AnalogyBasedEstimation(Model):
         group.add_argument('--exponent', type=float, default=2.0,
                            help='Exponent of Minkowsky L-P distance measure')
 
-
     def build(self):
         weighted_inputs = tf.multiply(self.features, self.train_inputs)
 
@@ -319,11 +361,37 @@ class AnalogyBasedEstimation(Model):
 
         # No specialized train op yet; select indices within op
         self._outputs = tf.one_hot(outputs, self.num_labels)
+        magnitude = tf.divide(tf.abs(tf.subtract(self.y_labels, outputs)),
+                              tf.add(self.y_labels, 1))
 
         pred = tf.divide(tf.reduce_sum(tf.cast(tf.less(magnitude, self.args.pred), tf.int32)), tf.shape(self.y_labels)[0])
 
         self._train_ops.append(distance)
         self._train_ops.append(pred)
+
+    def log_evaluation(self, session, feed_dict):
+        logging.debug('Values: %r Indices: %r',
+                      session.run(self.values, feed_dict=feed_dict),
+                      session.run(self.indices, feed_dict=feed_dict))
+        logging.debug('Labels: %r',
+                      session.run(self.labels, feed_dict=feed_dict))
+
+    @property
+    def validation_results(self):
+        return {
+            "analogy_distances": self.values,
+            "analogy_indexes": self.indices,
+            "analogy_labels": self.labels
+        }
+
+    @property
+    def validation_metadata(self):
+        return {
+            "analogy_indexes": {
+                "context": Dataset.TRAIN,
+                "item": Dataset.INDEXES
+            }
+        }
 
 class EstimatorModel(Model):
     """

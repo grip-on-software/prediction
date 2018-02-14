@@ -256,7 +256,7 @@ class Dataset(object):
     LABELS = 1
     WEIGHTS = 2
     WEATHER = 3
-    INDEXES = 3
+    INDEXES = 4
 
     # Indexes in the original dataset of uniquely identifying keys
     PROJECT_KEY = 0
@@ -363,6 +363,7 @@ class Dataset(object):
             dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
 
         # Validation data: original indexes in the dataset, features and labels
+        indexes = np.arange(len(dataset))
         latest_indexes = np.hstack([project_splits-1, -1])
         projects = self._get_splits(project_splits, dataset)
 
@@ -384,10 +385,11 @@ class Dataset(object):
 
         labels = labels[split_mask]
         weather = weather[split_mask]
+        indexes = indexes[split_mask]
         latest_weights = np.full(latest_labels.shape, 0.5)
-        latest = (latest_data, latest_labels, latest_weights, latest_indexes)
+        latest = (latest_data, latest_labels, latest_weights, None, latest_indexes)
 
-        return dataset, labels, weather, latest
+        return dataset, labels, weather, latest, indexes
 
     def _scale(self, datasets):
         # Scale the data to an appropriate normalized scale [0, 1) suitable for
@@ -418,11 +420,14 @@ class Dataset(object):
         weights = [self.choose(set_labels, ratios) for set_labels in labels]
         return weights, ratios
 
-    def _assemble_sets(self, dataset, labels, weather, validation):
-        train_data, test_data, train_labels, test_labels, train_weather, test_weather = \
-            train_test_split(dataset, labels, weather,
+    def _assemble_sets(self, validation, *items):
+        train_data, test_data, \
+            train_labels, test_labels, \
+            train_weather, test_weather, \
+            train_indexes, test_indexes = \
+            train_test_split(*items,
                              test_size=self.args.test_size,
-                             stratify=labels if self.args.stratified_split else None)
+                             stratify=items[self.LABELS] if self.args.stratified_split else None)
 
         train_data, test_data, validation_data = \
             self._scale([train_data, test_data, validation[self.INPUTS]])
@@ -431,10 +436,10 @@ class Dataset(object):
             self._weight_classes([train_labels, test_labels])
 
         return [
-            (train_data, train_labels, weights[self.TRAIN], train_weather),
-            (test_data, test_labels, weights[self.TEST], test_weather),
+            (train_data, train_labels, weights[self.TRAIN], train_weather, train_indexes),
+            (test_data, test_labels, weights[self.TEST], test_weather, test_indexes),
             (validation_data, validation[self.LABELS],
-             validation[self.WEIGHTS], validation[self.INDEXES])
+             validation[self.WEIGHTS], 0.0, validation[self.INDEXES])
         ]
 
     def load_datasets(self):
@@ -449,7 +454,7 @@ class Dataset(object):
                                                      name='full dataset')[0]
 
         if self.args.roll_sprints > 0:
-            dataset, labels, weather, validation = \
+            dataset, labels, weather, validation, indexes = \
                 self._roll_sprints(project_splits, dataset, labels, weather)
         else:
             logging.info('Cannot generate a validation set by rolling sprints')
@@ -458,7 +463,7 @@ class Dataset(object):
         self.num_labels = max(labels) + 1
 
         train, test, validation = \
-            self._assemble_sets(dataset, labels, weather, validation)
+            self._assemble_sets(validation, dataset, labels, weather, indexes)
 
         self._last_sprint_weather_accuracy(train[self.LABELS],
                                            weather=train[self.WEATHER],
@@ -525,7 +530,9 @@ class Dataset(object):
                 inputs, labels, weights = [
                     tf.constant(item) for item in self.data_sets[data_set][0:3]
                 ]
+                # Indexes within the set
                 indexes = tf.constant(list(range(len(self.data_sets[data_set][0]))))
+                weather = tf.constant(self.data_sets[data_set][self.WEATHER])
 
                 # Only loop through the validation set once and remain order.
                 if data_set == self.VALIDATION:
@@ -563,7 +570,7 @@ class Dataset(object):
                                        num_threads=self.args.num_threads,
                                        allow_smaller_final_batch=True)
 
-        self._batches[data_set] = [inputs, labels, weights, indexes]
+        self._batches[data_set] = [inputs, labels, weights, weather, indexes]
         return self._batches[data_set]
 
     def clear_batches(self, data_set):

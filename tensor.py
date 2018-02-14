@@ -114,6 +114,23 @@ def get_parser():
 
     return parser
 
+def alter_json_list(obj):
+    """
+    Convert a (multidimensional) NumPy array into a (nested) list, with all
+    NaN values replaced with None.
+    """
+
+    na_indexes = zip(*np.where(obj != np.nan_to_num(obj)))
+    output = obj.tolist()
+    for na_index in na_indexes:
+        part = output
+        for index in na_index[:-1]:
+            part = part[index]
+
+        part[na_index[-1]] = None
+
+    return output
+
 def serialize_json(obj):
     """
     Serialize an object to a JSON-serializable type when the object is not
@@ -121,7 +138,7 @@ def serialize_json(obj):
     """
 
     if isinstance(obj, np.ndarray):
-        return obj.tolist()
+        return alter_json_list(obj)
     if isinstance(obj, np.generic):
         return obj.item()
 

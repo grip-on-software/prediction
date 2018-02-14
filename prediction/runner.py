@@ -11,6 +11,11 @@ import numpy as np
 import sklearn.metrics
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
+try:
+    from tensorflow.contrib.learn.python.learn.estimators.prediction_key import PredictionKey
+except ImportError:
+    raise
+from .dataset import Dataset
 
 class Runner(object):
     """
@@ -81,17 +86,16 @@ class TFRunner(Runner):
                                                    shape=[self.args.batch_size])
 
     def _build_feed(self, batch_ops):
-        batch_inputs, batch_labels, batch_weights, batch_indexes = \
-            self._session.run(batch_ops)
+        batch = self._session.run(batch_ops)
 
-        batch_indexes = np.pad(batch_indexes,
-                               (0, self.args.batch_size - len(batch_indexes)),
+        extra_batch_size = self.args.batch_size - len(batch[Dataset.INDEXES])
+        batch_indexes = np.pad(batch[Dataset.INDEXES], (0, extra_batch_size),
                                'constant', constant_values=0)
 
         return {
-            self._model.x_input: batch_inputs,
-            self._model.y_labels: batch_labels,
-            self._model.y_weights: batch_weights,
+            self._model.x_input: batch[Dataset.INPUTS],
+            self._model.y_labels: batch[Dataset.LABELS],
+            self._model.y_weights: batch[Dataset.WEIGHTS],
             self._indexes_placeholder: batch_indexes
         }
 
@@ -120,6 +124,7 @@ class TFRunner(Runner):
 
                 if step % self.args.test_interval == 0:
                     test_feed = self._build_feed(test_batch_ops)
+                    logging.info('%r', test_feed)
                     self._test_progress(saver, step, test_feed)
 
                 step = step + 1
@@ -177,15 +182,7 @@ class TFRunner(Runner):
         else:
             f_score = 0.0
 
-        """
-        logging.debug("w1: %r b1: %r",
-                      self._model.weights1.eval(), self._model.biases1.eval())
-        logging.debug("w2: %r b2: %r",
-                      self._model.weights2.eval(), self._model.biases2.eval())
-        logging.debug("wm: %r bm: %r",
-                      self._model.weights_max.eval(),
-                      self._model.biases_max.eval())
-        """
+        self._model.log_evaluation(self._session, test_feed)
         logging.info("real labels: %r", test_label)
         logging.info("predictions: %r", pred)
 
@@ -202,16 +199,28 @@ class TFRunner(Runner):
         validation_batch_ops = datasets.get_batches(datasets.VALIDATION)
         stop = False
         labels = []
+        results = {}
         while not stop:
             try:
                 validation_batch = self._build_feed(validation_batch_ops)
                 labels.append(self._validate(validation_batch))
+                metadata = self._model.validation_metadata
+                for key, values in self._model.validation_results.items():
+                    results.setdefault(key, [])
+                    result = self._session.run(values,
+                                               feed_dict=validation_batch)
+
+                    if key in metadata:
+                        context = datasets.data_sets[metadata[key]["context"]]
+                        item = context[metadata[key]["item"]]
+                        result = item[result]
+
+                    results[key].append(result)
             except tf.errors.OutOfRangeError:
                 stop = True
 
-        return {
-            "labels": np.hstack(labels)
-        }
+        results["labels"] = labels
+        return dict((key, np.hstack(values)) for key, values in results.items())
 
 class FullTrainRunner(TFRunner):
     """
