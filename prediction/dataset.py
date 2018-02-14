@@ -21,6 +21,10 @@ class Loader(object):
         self.args = args
 
         self._full_data, self._meta = self._load()
+
+        self._feature_names = []
+        self._feature_names.extend(self.names)
+
         self._indexes, self._labels = self._calculate_indexes()
         self._selected_data = None
         self._combinations = None
@@ -65,6 +69,8 @@ class Loader(object):
         return labels, label_indexes
 
     def _get_assignments(self, indexes):
+        names = []
+        names.extend(self._feature_names)
         num_columns = self.num_columns
         new_columns = []
         parser = expression.Expression_Parser(variables=self.name_columns,
@@ -78,12 +84,13 @@ class Loader(object):
             if not all(isinstance(value, np.ndarray) for value in values):
                 raise TypeError("Invalid assignment {}".format(assignment))
 
+            names.extend(parser.modified_variables.keys())
             new_columns.extend(values)
             indexes.update(range(num_columns, num_columns + len(values)))
             num_columns += len(values)
 
         full_data = np.hstack([self._full_data, np.array(new_columns).T])
-        return full_data, num_columns
+        return full_data, names, num_columns
 
     def _load(self):
         file_opener = get_file_opener(self.args)
@@ -140,12 +147,15 @@ class Loader(object):
             logging.info('No labels selected, generating random 2-class labels')
             labels = np.random.randint(0, 1+1, size=(self._full_data.shape[0],))
 
-        names = [name for index, name in enumerate(self._meta) if index in indexes]
+        self._feature_names = [
+            name for index, name in enumerate(self._meta) if index in indexes
+        ]
         logging.debug('Leftover indices: %r', indexes)
-        logging.debug('Leftover column names: %r', names)
+        logging.debug('Leftover column names: %r', self._feature_names)
 
         if self.args.assign:
-            self._full_data = self._get_assignments(indexes)[0]
+            self._full_data, self._feature_names = \
+                self._get_assignments(indexes)[0:2]
 
         return indexes, labels
 
@@ -178,10 +188,18 @@ class Loader(object):
     @property
     def names(self):
         """
-        Retrieve the attribute names.
+        Retrieve the attribute names of the unfiltered data set.
         """
 
         return self._meta.names()
+
+    @property
+    def features(self):
+        """
+        Retrieve the names of the attributes that were selected as features.
+        """
+
+        return self._feature_names
 
     @property
     def num_columns(self):
@@ -494,6 +512,14 @@ class Dataset(object):
             return self._loader.meta["organization"][1]
 
         return []
+
+    @property
+    def features(self):
+        """
+        Retrieve the names of the features used in the data set.
+        """
+
+        return self._loader.features
 
     @property
     def num_features(self):

@@ -185,6 +185,7 @@ class Classification(object):
 
             results["configuration"] = {
                 "label": self.args.label,
+                "features": data_sets.features,
                 "model": self.args.model,
                 "binary": self.args.binary,
                 "weighted": self.args.weighted,

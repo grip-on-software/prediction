@@ -355,9 +355,11 @@ class AnalogyBasedEstimation(Model):
 
         # Take values and indices of lowest distances
         self.values, self.indices = tf.nn.top_k(tf.negative(distance), k=self.args.num_k)
-        self.labels = tf.reshape(tf.gather(self.train_labels, self.indices),
-                                 [self.args.num_k, tf.shape(self.x_input)[0]])
-        outputs = tf.transpose(tf.reduce_mean(self.labels, axis=0))
+        label_shape = [self.args.num_k, tf.shape(self.x_input)[0]]
+        self.labels = tf.transpose(tf.reshape(tf.gather(self.train_labels,
+                                                        self.indices),
+                                              label_shape))
+        outputs = tf.reduce_mean(self.labels, axis=1)
 
         # No specialized train op yet; select indices within op
         self._outputs = tf.one_hot(outputs, self.num_labels)
