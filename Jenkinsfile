@@ -66,7 +66,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
-                    sh '/bin/bash -c "cd /home/docker && Rscript sprint_results.r --file $PWD/output/sprint_labels.json --config $ANALYSIS_CONFIGURATION --output $PWD/output"'
+                    sh '/bin/bash -c "cd /home/docker && Rscript sprint_results.r --file $PWD/output/sprint_labels.json --features $PWD/output/sprint_features.arff --config $ANALYSIS_CONFIGURATION --output $PWD/output"'
                 }
             }
         }
