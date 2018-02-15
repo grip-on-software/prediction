@@ -297,7 +297,8 @@ class Dataset(object):
             split_mask[0:self.args.roll_sprints] = False
 
             project_trims = np.hstack([
-                project_splits+i for i in range(self.args.roll_sprints)
+                (project_splits+i)[project_splits+i < len(labels)]
+                for i in range(self.args.roll_sprints)
             ])
             split_mask[project_trims] = False
 
