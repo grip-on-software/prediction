@@ -380,7 +380,7 @@ class Dataset(object):
             # has access to this label as well.
             dataset = np.hstack([dataset, labels[:, np.newaxis]]).astype(np.float32)
 
-        # Validation data: original indexes in the dataset, features and labels
+        # Keep track of original indexes in the dataset, features and labels
         indexes = np.arange(len(dataset))
         latest_indexes = np.hstack([project_splits-1, -1])
         projects = self._get_splits(project_splits, dataset)
@@ -454,8 +454,10 @@ class Dataset(object):
             self._weight_classes([train_labels, test_labels])
 
         return [
-            (train_data, train_labels, weights[self.TRAIN], train_weather, train_indexes),
-            (test_data, test_labels, weights[self.TEST], test_weather, test_indexes),
+            (train_data, train_labels, weights[self.TRAIN], train_weather,
+             train_indexes),
+            (test_data, test_labels, weights[self.TEST], test_weather,
+             test_indexes),
             (validation_data, validation[self.LABELS],
              validation[self.WEIGHTS], 0.0, validation[self.INDEXES])
         ]

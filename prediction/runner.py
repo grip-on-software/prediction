@@ -85,7 +85,8 @@ class TFRunner(Runner):
         self._indexes_placeholder = tf.placeholder(dtype=tf.int32,
                                                    shape=[self.args.batch_size])
 
-    def _build_feed(self, batch_ops):
+    def _build_feed(self, batch_ops, dataset=Dataset.TRAIN):
+        # pylint: disable=unused-argument
         batch = self._session.run(batch_ops)
 
         extra_batch_size = self.args.batch_size - len(batch[Dataset.INDEXES])
@@ -123,7 +124,8 @@ class TFRunner(Runner):
                                          duration)
 
                 if step % self.args.test_interval == 0:
-                    test_feed = self._build_feed(test_batch_ops)
+                    test_feed = self._build_feed(test_batch_ops,
+                                                 dataset=datasets.TEST)
                     logging.info('%r', test_feed)
                     self._test_progress(saver, step, test_feed)
 
@@ -135,7 +137,7 @@ class TFRunner(Runner):
                            global_step=step)
 
     def _train(self, train_batch_ops):
-        batch_feed = self._build_feed(train_batch_ops)
+        batch_feed = self._build_feed(train_batch_ops, dataset=Dataset.TRAIN)
         train_values = self._session.run(self._model.train_ops,
                                          feed_dict=batch_feed)
         return batch_feed, train_values
@@ -202,7 +204,8 @@ class TFRunner(Runner):
         results = {}
         while not stop:
             try:
-                validation_batch = self._build_feed(validation_batch_ops)
+                validation_batch = self._build_feed(validation_batch_ops,
+                                                    dataset=datasets.VALIDATION)
                 labels.append(self._validate(validation_batch))
                 metadata = self._model.validation_metadata
                 for key, values in self._model.validation_results.items():
@@ -239,14 +242,20 @@ class FullTrainRunner(TFRunner):
         self._train_labels = train[datasets.LABELS]
         super(FullTrainRunner, self).loop(datasets)
 
-    def _build_feed(self, batch_ops):
-        feed_dict = super(FullTrainRunner, self)._build_feed(batch_ops)
-        train_inputs = np.delete(self._train_inputs,
-                                 feed_dict[self._indexes_placeholder],
-                                 axis=0)
-        train_labels = np.delete(self._train_labels,
-                                 feed_dict[self._indexes_placeholder],
-                                 axis=0)
+    def _build_feed(self, batch_ops, dataset=Dataset.TRAIN):
+        feed_dict = super(FullTrainRunner, self)._build_feed(batch_ops,
+                                                             dataset=dataset)
+
+        if dataset == Dataset.TRAIN:
+            train_inputs = np.delete(self._train_inputs,
+                                     feed_dict[self._indexes_placeholder],
+                                     axis=0)
+            train_labels = np.delete(self._train_labels,
+                                     feed_dict[self._indexes_placeholder],
+                                     axis=0)
+        else:
+            train_inputs = self._train_inputs
+            train_labels = self._train_labels
 
         feed_dict.update({
             self._model.train_inputs: train_inputs,
