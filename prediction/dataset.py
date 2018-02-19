@@ -550,8 +550,7 @@ class Dataset(object):
         This only contains the features that are provided to the model.
         """
 
-        validation_indexes = self.data_sets[self.VALIDATION][self.INDEXES]
-        return self._loader.full_data[validation_indexes, self._loader.indexes]
+        return self.validation_context[:, list(self._loader.indexes)]
 
     def get_batches(self, data_set):
         """
