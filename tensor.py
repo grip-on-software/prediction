@@ -183,6 +183,7 @@ class Classification(object):
                 validation = data_sets.validation_context[:, validation_key]
                 results[result_key] = result_config["filter"](validation)
 
+            results["features"] = data_sets.validation_values
             results["configuration"] = {
                 "label": self.args.label,
                 "features": data_sets.features,
