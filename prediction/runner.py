@@ -202,12 +202,13 @@ class TFRunner(Runner):
 
         if "values" in metadata:
             if metadata["values"]:
-                return datasets.get_values(metadata["context"])
+                item = datasets.get_values(metadata["context"])
+            else:
+                item = datasets.get_context(metadata["context"])
+        else:
+            context = datasets.data_sets[metadata["context"]]
+            item = context[metadata["item"]]
 
-            return datasets.get_context(metadata["context"])
-
-        context = datasets.data_sets[metadata["context"]]
-        item = context[metadata["item"]]
         return item[result]
 
     def evaluate(self, datasets):
