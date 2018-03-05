@@ -28,20 +28,41 @@ class Loader(object):
         self._indexes, self._labels = self._calculate_indexes()
         self._combinations = None
 
-    def _translate(self, indices, translation):
+    def translate(self, indices, translation=None):
+        """
+        Look up the index numbers in the full data set given a list of indices.
+        Each entry in the indices may itself be a comma-separated list of lookup
+        values, which may be indexes themselves or a feature name.
+
+        The `translation`, if given, must be a dictionary mapping feature names
+        to column indexes.
+
+        Returns a generator which yield indexes until all the entries of the
+        indices have been translated. If an index is outside of the allowable
+        range of column indexes, or it is not a column index, translatable
+        feature name or a comma-separated entry of indexes and feature names,
+        then a `ValueError` is raised.
+        """
+
+        if translation is None:
+            translation = self.name_translation
+
         for index in indices:
             try:
-                yield int(index)
+                if 0 <= int(index) < self.num_columns:
+                    yield int(index)
+                else:
+                    raise ValueError('Index out of range: {0}'.format(index))
             except ValueError:
                 if index in translation:
                     yield translation[index]
                 elif ',' in index:
-                    for idx in self._translate(index.split(','), translation):
+                    for idx in self.translate(index.split(','), translation):
                         yield idx
                 else:
                     raise ValueError('Index {0} could not be understood'.format(index))
 
-    def _get_labels(self, columns, translation):
+    def _get_labels(self, columns):
         parser = expression.Expression_Parser(variables=columns,
                                               functions={'round': np.round})
         column = parser.parse(self.args.label)
@@ -53,7 +74,7 @@ class Loader(object):
             raise TypeError("Invalid label {0}: {1!r}".format(self.args.label,
                                                               type(column)))
 
-        label_indexes.update(self._translate(parser.used_variables, translation))
+        label_indexes.update(self.translate(parser.used_variables))
 
         if self.args.replace_na is not False:
             column[~np.isfinite(column)] = self.args.replace_na
@@ -120,10 +141,8 @@ class Loader(object):
         return next(self._combinations)
 
     def _calculate_indexes(self):
-        name_translation = dict(zip(self.names, range(self.num_columns)))
-
         if self.args.index:
-            indexes = set(self._translate(self.args.index, name_translation))
+            indexes = set(self.translate(self.args.index))
         else:
             indexes = set(range(self.num_columns))
 
@@ -134,11 +153,10 @@ class Loader(object):
             indexes.discard(name_translation["organization"])
 
         if self.args.remove:
-            indexes -= set(self._translate(self.args.remove, name_translation))
+            indexes -= set(self.translate(self.args.remove))
 
         if self.args.label:
-            labels, label_indexes = self._get_labels(self.name_columns,
-                                                     name_translation)
+            labels, label_indexes = self._get_labels(self.name_columns)
             indexes -= label_indexes
 
             logging.debug('Selected labels %r: %r', label_indexes, labels)
@@ -229,6 +247,23 @@ class Loader(object):
 
         return (Dataset.PROJECT_KEY,)
 
+    @property
+    def name_translation(self):
+        """
+        Retrieve a dictionary of names and column indexes of the attributes
+        in the unfiltered data set.
+        """
+
+        return dict(zip(self.names, range(self.num_columns)))
+
+    @property
+    def feature_translation(self):
+        """
+        Retrieve a dictionary of names and column indexes in the filtered
+        data set where only the remaining feature names are provided.
+        """
+
+        return dict(zip(self._feature_names, range(len(self._feature_names))))
 
     @property
     def project_splits(self):
@@ -318,6 +353,12 @@ class Dataset(object):
 
     def _roll(self, project_data):
         rolls = []
+
+        if self.args.keep_index:
+            indexes = self._loader.translate(self.args.keep_index,
+                                             self._loader.feature_translation)
+            rolls.append(project_data[:, list(indexes)])
+
         for i in range(1, self.args.roll_sprints+1):
             rolled_data = np.roll(project_data, i, axis=0)
 
@@ -549,7 +590,6 @@ class Dataset(object):
         """
 
         context = self.get_context(dataset)
-        logging.info('%r', list(self._loader.indexes))
         return context[:, list(self._loader.indexes)]
 
     def get_batches(self, data_set):

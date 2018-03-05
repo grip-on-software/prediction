@@ -77,6 +77,8 @@ def get_parser():
     parser.add_argument('--roll-sprints', dest='roll_sprints', type=int,
                         nargs='?', default=0, const=1,
                         help='Use features of previous sprints')
+    parser.add_argument('--keep-index', dest='keep_index', default=None,
+                        nargs='*', help='Fatures of current sprint to keep')
     parser.add_argument('--roll-labels', dest='roll_labels', default=False,
                         action='store_true', help='Use labels of previous sprints')
     parser.add_argument('--roll-validation', dest='roll_validation',
