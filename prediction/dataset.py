@@ -26,7 +26,6 @@ class Loader(object):
         self._feature_names.extend(self.names)
 
         self._indexes, self._labels = self._calculate_indexes()
-        self._selected_data = None
         self._combinations = None
 
     def _translate(self, indices, translation):
@@ -499,8 +498,9 @@ class Dataset(object):
         }
 
         # Show properties for validation sprints that uniquely identify them.
+        validation_context = self.get_context(self.VALIDATION)
         keys = self._loader.project_split_keys + (self.SPRINT_KEY,)
-        logging.info('Validation sprints: %r', self.validation_context[:, keys])
+        logging.info('Validation sprints: %r', validation_context[:, keys])
 
     @property
     def organizations(self):
@@ -531,26 +531,26 @@ class Dataset(object):
 
         return self.data_sets[self.TRAIN][self.INPUTS].shape[1]
 
-    @property
-    def validation_context(self):
+    def get_context(self, dataset):
         """
         Retrieve the original samples from the data set from which the
-        validation set is derived. This contains all feature/label columns
-        as well as contextual information that is discarded from the validation
+        given data set is derived. This contains all feature/label columns
+        as well as contextual information that is discarded from the data
         set such as project identifiers.
         """
 
-        validation_indexes = self.data_sets[self.VALIDATION][self.INDEXES]
-        return self._loader.full_data[validation_indexes, :]
+        indexes = self.data_sets[dataset][self.INDEXES]
+        return self._loader.full_data[indexes, :]
 
-    @property
-    def validation_values(self):
+    def get_values(self, dataset):
         """
-        Retrieve the values of the features from the validation set.
+        Retrieve the values of the features from the given data set.
         This only contains the features that are provided to the model.
         """
 
-        return self.validation_context[:, list(self._loader.indexes)]
+        context = self.get_context(dataset)
+        logging.info('%r', list(self._loader.indexes))
+        return context[:, list(self._loader.indexes)]
 
     def get_batches(self, data_set):
         """

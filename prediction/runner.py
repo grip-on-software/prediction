@@ -197,6 +197,19 @@ class TFRunner(Runner):
 
         return pred
 
+    def _get_context_result(self, datasets, key, result):
+        metadata = self._model.validation_metadata[key]
+
+        if "values" in metadata:
+            if metadata["values"]:
+                return datasets.get_values(metadata["context"])
+
+            return datasets.get_context(metadata["context"])
+
+        context = datasets.data_sets[metadata["context"]]
+        item = context[metadata["item"]]
+        return item[result]
+
     def evaluate(self, datasets):
         validation_batch_ops = datasets.get_batches(datasets.VALIDATION)
         stop = False
@@ -207,16 +220,13 @@ class TFRunner(Runner):
                 validation_batch = self._build_feed(validation_batch_ops,
                                                     dataset=datasets.VALIDATION)
                 labels.append(self._validate(validation_batch))
-                metadata = self._model.validation_metadata
                 for key, values in self._model.validation_results.items():
                     results.setdefault(key, [])
                     result = self._session.run(values,
                                                feed_dict=validation_batch)
 
-                    if key in metadata:
-                        context = datasets.data_sets[metadata[key]["context"]]
-                        item = context[metadata[key]["item"]]
-                        result = item[result]
+                    if key in self._model.validation_metadata:
+                        result = self._get_context_result(datasets, key, result)
 
                     results[key].append(result)
             except tf.errors.OutOfRangeError:

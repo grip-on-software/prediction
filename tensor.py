@@ -178,12 +178,13 @@ class Classification(object):
                         if organization_names.size != 0 else None
                 }
             }
+            validation_context = data_sets.get_context(data_sets.VALIDATION)
             for result_key, result_config in keys.items():
                 validation_key = result_config["key"]
-                validation = data_sets.validation_context[:, validation_key]
+                validation = validation_context[:, validation_key]
                 results[result_key] = result_config["filter"](validation)
 
-            results["features"] = data_sets.validation_values
+            results["features"] = data_sets.get_values(data_sets.VALIDATION)
             results["configuration"] = {
                 "label": self.args.label,
                 "features": data_sets.features,

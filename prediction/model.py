@@ -164,7 +164,7 @@ class Model(object):
     @property
     def validation_metadata(self):
         """
-        Provide a dictionary of the same shape as `alidation_results`
+        Provide a dictionary of the same shape as `validation_results`
         which describes what kind of results are returned.
         """
 
@@ -383,7 +383,8 @@ class AnalogyBasedEstimation(Model):
         return {
             "analogy_distances": self.values,
             "analogy_indexes": self.indices,
-            "analogy_labels": self.labels
+            "analogy_labels": self.labels,
+            "analogy_values": self.indices
         }
 
     @property
@@ -392,6 +393,10 @@ class AnalogyBasedEstimation(Model):
             "analogy_indexes": {
                 "context": Dataset.TRAIN,
                 "item": Dataset.INDEXES
+            },
+            "analogy_values": {
+                "context": Dataset.TRAIN,
+                "values": True
             }
         }
 
