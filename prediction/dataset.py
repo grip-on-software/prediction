@@ -9,6 +9,7 @@ from scipy.io import arff
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from sortedcontainers import SortedSet
 import expression
 from .files import get_file_opener
 
@@ -142,9 +143,9 @@ class Loader(object):
 
     def _calculate_indexes(self):
         if self.args.index:
-            indexes = set(self.translate(self.args.index))
+            indexes = SortedSet(self.translate(self.args.index))
         else:
-            indexes = set(range(self.num_columns))
+            indexes = SortedSet(range(self.num_columns))
 
         indexes.discard(Dataset.PROJECT_KEY)
         if "organization" in name_translation:
