@@ -189,6 +189,7 @@ class Classification(object):
             results["features"] = data_sets.get_values(data_sets.VALIDATION)
             results["configuration"] = {
                 "label": self.args.label,
+                "labels": data_sets.labels,
                 "features": data_sets.features,
                 "model": self.args.model,
                 "binary": self.args.binary,

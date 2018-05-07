@@ -26,7 +26,8 @@ class Loader(object):
         self._feature_names = []
         self._feature_names.extend(self.names)
 
-        self._indexes, self._labels = self._calculate_indexes()
+        self._indexes, self._labels, self._label_indexes = \
+            self._calculate_indexes()
         self._combinations = None
 
     def translate(self, indices, translation=None):
@@ -156,6 +157,7 @@ class Loader(object):
         if self.args.remove:
             indexes -= set(self.translate(self.args.remove))
 
+        label_indexes = set()
         if self.args.label:
             labels, label_indexes = self._get_labels(self.name_columns)
             indexes -= label_indexes
@@ -175,7 +177,7 @@ class Loader(object):
             self._full_data, self._feature_names = \
                 self._get_assignments(indexes)[0:2]
 
-        return indexes, labels
+        return indexes, labels, label_indexes
 
     @property
     def full_data(self):
@@ -204,6 +206,15 @@ class Loader(object):
         return self._meta
 
     @property
+    def label_indexes(self):
+        """
+        Retrieve the set of indexes of attributes used to generate the label
+        values.
+        """
+
+        return self._label_indexes
+
+    @property
     def names(self):
         """
         Retrieve the attribute names of the unfiltered data set.
@@ -218,6 +229,16 @@ class Loader(object):
         """
 
         return self._feature_names
+
+    @property
+    def labels(self):
+        """
+        Retrieve the names of the attributes that were used to build labels.
+        """
+
+        return [
+            name for index, name in enumerate(self._meta) if index in self._label_indexes
+        ]
 
     @property
     def num_columns(self):
@@ -292,7 +313,7 @@ class Loader(object):
         dataset = self._full_data[:, tuple(indexes)]
         if self.args.replace_na is not False:
             dataset[~np.isfinite(dataset)] = self.args.replace_na
-        return dataset, self._labels
+        return dataset, indexes, self._labels
 
 class Dataset(object):
     """
@@ -323,6 +344,7 @@ class Dataset(object):
         self.num_labels = None
 
         self._loader = Loader(self.args)
+        self._feature_indexes = None
         self.load_datasets()
 
         self._batches = {}
@@ -508,7 +530,7 @@ class Dataset(object):
         Load the dataset and split into train/test, and inputs/labels.
         """
 
-        dataset, labels = self._loader.select_data()
+        dataset, self._feature_indexes, labels = self._loader.select_data()
         project_splits = self._loader.project_splits
 
         weather = self._last_sprint_weather_accuracy(labels, project_splits,
@@ -566,6 +588,14 @@ class Dataset(object):
         return self._loader.features
 
     @property
+    def labels(self):
+        """
+        Retrieve the names of the labels used in the data set.
+        """
+
+        return self._loader.labels
+
+    @property
     def num_features(self):
         """
         Retrieve the number of features in the data set.
@@ -591,7 +621,7 @@ class Dataset(object):
         """
 
         context = self.get_context(dataset)
-        return context[:, list(self._loader.indexes)]
+        return context[:, list(self._feature_indexes)]
 
     def get_batches(self, data_set):
         """
