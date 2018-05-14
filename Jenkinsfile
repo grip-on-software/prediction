@@ -14,7 +14,7 @@ pipeline {
     }
     triggers {
         gitlab(triggerOnPush: true, triggerOnMergeRequest: true, branchFilterType: 'All', secretToken: env.GITLAB_TOKEN)
-        cron('H H * * 0')
+        cron(env.PREDICTION_CRON)
     }
 
     post {
