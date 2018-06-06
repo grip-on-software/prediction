@@ -2,6 +2,7 @@
 TensorFlow ARFF dataset loader.
 """
 
+from collections import OrderedDict
 import itertools
 import logging
 import tensorflow as tf
@@ -29,8 +30,7 @@ class Loader(object):
 
         self._full_data, self._meta = self._load()
 
-        self._feature_names = []
-        self._feature_names.extend(self.names)
+        self._feature_meta = OrderedDict.fromkeys(self.names)
 
         self._indexes, self._labels, self._label_indexes = \
             self._calculate_indexes()
@@ -97,8 +97,7 @@ class Loader(object):
         return labels, label_indexes
 
     def _get_assignments(self, indexes):
-        names = []
-        names.extend(self._feature_names)
+        meta = OrderedDict(self._feature_meta)
         num_columns = self.num_columns
         new_columns = []
         parser = expression.Expression_Parser(variables=self.name_columns,
@@ -113,13 +112,18 @@ class Loader(object):
             if not all(isinstance(value, np.ndarray) for value in values):
                 raise TypeError("Invalid assignment {}".format(assignment))
 
-            names.extend(parser.modified_variables.keys())
+            for name in parser.modified_variables.keys():
+                meta[name] = {
+                    "attributes": parser.used_variables,
+                    "expression": assignment
+                }
+
             new_columns.extend(values)
             indexes.update(range(num_columns, num_columns + len(values)))
             num_columns += len(values)
 
         full_data = np.hstack([self._full_data, np.array(new_columns).T])
-        return full_data, names, num_columns
+        return full_data, meta, num_columns
 
     def _load(self):
         file_opener = get_file_opener(self.args)
@@ -174,14 +178,15 @@ class Loader(object):
             logging.info('No labels selected, generating random 2-class labels')
             labels = np.random.randint(0, 1+1, size=(self._full_data.shape[0],))
 
-        self._feature_names = [
-            name for index, name in enumerate(self._meta) if index in indexes
-        ]
+        self._feature_meta = OrderedDict.fromkeys(
+            name for index, name in enumerate(self._feature_meta.keys())
+            if index in indexes
+        )
         logging.debug('Leftover indices: %r', indexes)
-        logging.debug('Leftover column names: %r', self._feature_names)
+        logging.debug('Leftover column names: %r', self._feature_meta.keys())
 
         if self.args.assign:
-            self._full_data, self._feature_names = \
+            self._full_data, self._feature_meta = \
                 self._get_assignments(indexes)[0:2]
 
         return indexes, labels, label_indexes
@@ -235,7 +240,19 @@ class Loader(object):
         Retrieve the names of the attributes that were selected as features.
         """
 
-        return self._feature_names
+        return self._feature_meta.keys()
+
+    @property
+    def assignments(self):
+        """
+        Retrieve a dictionary of attributes that were generated from other
+        features.
+        """
+
+        return dict(
+            (name, features) for name, features in self._feature_meta.items()
+            if features is not None
+        )
 
     @property
     def labels(self):
@@ -244,7 +261,8 @@ class Loader(object):
         """
 
         return [
-            name for index, name in enumerate(self._meta) if index in self._label_indexes
+            name for index, name in enumerate(self._meta)
+            if index in self._label_indexes
         ]
 
     @property
@@ -292,7 +310,8 @@ class Loader(object):
         data set where only the remaining feature names are provided.
         """
 
-        return dict(zip(self._feature_names, range(len(self._feature_names))))
+        return dict(zip(self._feature_meta.keys(),
+                        range(len(self._feature_meta))))
 
     @property
     def project_splits(self):
@@ -593,6 +612,15 @@ class Dataset(object):
         """
 
         return self._loader.features
+
+    @property
+    def assignments(self):
+        """
+        Retrieve the assignment variables for generated features as a dictionary
+        of feature name and set of attribute names.
+        """
+
+        return self._loader.assignments
 
     @property
     def labels(self):

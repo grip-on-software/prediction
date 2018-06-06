@@ -139,6 +139,8 @@ def serialize_json(obj):
     serializable by the default JSON code.
     """
 
+    if isinstance(obj, set):
+        return list(obj)
     if isinstance(obj, np.ndarray):
         return alter_json_list(obj)
     if isinstance(obj, np.generic):
@@ -190,6 +192,7 @@ class Classification(object):
             results["configuration"] = {
                 "label": self.args.label,
                 "labels": data_sets.labels,
+                "assignments": data_sets.assignments,
                 "features": data_sets.features,
                 "model": self.args.model,
                 "binary": self.args.binary,
