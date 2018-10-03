@@ -674,11 +674,10 @@ class Dataset(object):
 
             logging.info('%r', dataset[0,:])
             if self._times is None:
-                self._times = filter(lambda current_time: \
-                                         self._check_time_sets(dataset,
-                                                               time_index,
-                                                               current_time),
-                                     set(dataset[:, time_index]))
+                self._times = (current_time
+                               for current_time in set(dataset[:, time_index])
+                               if self._check_time_sets(dataset, time_index,
+                                                        current_time))
             current_time = next(self._times)
             logging.warning('Current time is %s', current_time)
             train, test, validation = \
