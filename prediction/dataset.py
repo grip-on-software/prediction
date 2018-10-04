@@ -573,13 +573,16 @@ class Dataset(object):
     def _check_time_sets(self, dataset, time_index, current_time):
         train_mask, test_mask = \
             self._make_time_masks(dataset, time_index, current_time)[:2]
+        train_size = np.count_nonzero(train_mask)
+        test_size = np.count_nonzero(test_mask)
         logging.warning('Time: %d Train: %d Test: %d', current_time,
-                        np.count_nonzero(train_mask),
-                        np.count_nonzero(test_mask))
-        return np.count_nonzero(train_mask) > self.args.time_size and \
-                np.count_nonzero(test_mask) > self.args.time_size
+                        train_size, test_size)
+        return train_size > self.args.time_size and test_size > 0
 
-    def _assemble_time_sets(self, dataset, labels, weather, time_index, current_time):
+    def _assemble_time_sets(self, time_index, current_time, *data_set):
+        dataset = data_set[self.INPUTS]
+        labels = data_set[self.LABELS]
+        weather = data_set[self.WEATHER]
         indexes = np.arange(len(dataset))
 
         features = [True] * dataset.shape[1]
@@ -588,37 +591,28 @@ class Dataset(object):
             offset = i * (len(self._loader.features) + len(self.args.keep_index))
             features[offset + time_index] = False
 
-        train_mask, test_mask, validation_mask = \
-            self._make_time_masks(dataset, time_index, current_time)
+        masks = self._make_time_masks(dataset, time_index, current_time)
 
-        train_data = dataset[train_mask, :][:, features]
-        test_data = dataset[test_mask, :][:, features]
-        validation_data = dataset[validation_mask, :][:, features]
+        data = self._scale([
+            dataset[masks[self.TRAIN], :][:, features],
+            dataset[masks[self.TEST], :][:, features],
+            dataset[masks[self.VALIDATION], :][:, features]
+        ])
 
-        train_labels = labels[train_mask]
-        test_labels = labels[test_mask]
-        validation_labels = labels[validation_mask]
-
-        train_weather = weather[train_mask]
-        test_weather = weather[test_mask]
-
-        train_indexes = indexes[train_mask]
-        test_indexes = indexes[test_mask]
-        validation_indexes = indexes[validation_mask]
-
-        train_data, test_data, validation_data = \
-            self._scale([train_data, test_data, validation_data])
-
-        weights, self.ratios = \
-            self._weight_classes([train_labels, test_labels])
+        weights, self.ratios = self._weight_classes([
+            labels[masks[self.TRAIN]], labels[masks[self.TEST]]
+        ])
 
         return [
-            (train_data, train_labels, weights[self.TRAIN], train_weather,
-             train_indexes),
-            (test_data, test_labels, weights[self.TEST], test_weather,
-             test_indexes),
-            (validation_data, validation_labels,
-             np.full(validation_labels.shape, 0.5), 0.0, validation_indexes)
+            (data[self.TRAIN], labels[masks[self.TRAIN]],
+             weights[self.TRAIN], weather[masks[self.TRAIN]],
+             indexes[masks[self.TRAIN]]),
+            (data[self.TEST], labels[masks[self.TEST]],
+             weights[self.TEST], weather[masks[self.TEST]],
+             indexes[masks[self.TEST]]),
+            (data[self.VALIDATION], labels[masks[self.VALIDATION]],
+             np.full(labels[masks[self.VALIDATION]].shape, 0.5), 0.0,
+             indexes[masks[self.VALIDATION]])
         ]
 
     def _assemble_sets(self, validation, *items):
@@ -672,7 +666,7 @@ class Dataset(object):
                                             self._loader.feature_translation))
             logging.info('Time index: %r', time_index)
 
-            logging.info('%r', dataset[0,:])
+            logging.info('%r', dataset[0, :])
             if self._times is None:
                 self._times = (current_time
                                for current_time in set(dataset[:, time_index])
@@ -681,7 +675,8 @@ class Dataset(object):
             current_time = next(self._times)
             logging.warning('Current time is %s', current_time)
             train, test, validation = \
-                self._assemble_time_sets(dataset, labels, weather, time_index, current_time)
+                self._assemble_time_sets(time_index, current_time, dataset,
+                                         labels, [], weather)
         else:
             train, test, validation = \
                 self._assemble_sets(validation, dataset, labels, weather, indexes)
