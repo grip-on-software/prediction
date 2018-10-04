@@ -24,7 +24,7 @@ pipeline {
 
     post {
         success {
-            archiveArtifacts artifacts: 'output/**/*.json', excludes: 'output/sprint_labels*.json', onlyIfSuccessful: true
+            archiveArtifacts artifacts: 'output/**/*.json', onlyIfSuccessful: true
             updateGitlabCommitStatus name: env.JOB_NAME, state: 'success'
         }
         failure {
@@ -156,6 +156,7 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
                     sh "/bin/bash -cex \"cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript sprint_results.r --file \$WORKSPACE/output/sprint_labels.${env.BUILD_TAG}.json --features \$WORKSPACE/output/sprint_features.${env.BUILD_TAG}.arff --config $ANALYSIS_CONFIGURATION --output \$WORKSPACE/output $REPORT_PARAMS --org \\\$org; done\""
+                    sh "mv output/sprint_labels.${env.BUILD_TAG}.json output/sprint_labels.json"
                 }
             }
         }
