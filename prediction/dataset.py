@@ -484,8 +484,6 @@ class Dataset(object):
         if self.args.validation_index:
             i = next(self._loader.translate((self.args.validation_index,),
                                             self._loader.feature_translation))
-            logging.info('validation index: %d', i)
-            logging.info('%r', dataset[0, :])
             validation_mask = dataset[:, i] != 0
             if self.args.roll_validation:
                 validation_mask[project_splits-2] = True
@@ -499,8 +497,6 @@ class Dataset(object):
                                               project_splits),
                                      end=False).flatten()
             dataset = self._trim(projects, end=False)
-
-            logging.info('%r %r', dataset.shape, latest_mask.shape)
 
             latest_data = dataset[latest_mask, :]
             dataset = dataset[~latest_mask, :]
@@ -516,14 +512,12 @@ class Dataset(object):
                 latest_data = np.vstack([p[-2, :] for p in projects])
 
             dataset = self._trim(projects)
-            latest_mask = None
+            validation_mask = None
 
         latest_labels = labels[latest_indexes]
 
         split_mask = self._get_split_mask(project_splits, labels,
                                           validation_mask=validation_mask)
-
-        logging.debug('%r', split_mask)
 
         labels = labels[split_mask]
         weather = weather[split_mask]
