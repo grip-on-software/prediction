@@ -286,6 +286,10 @@ class MultiLayerPerceptron(Model):
                       session.run(self.weights_max, feed_dict=feed_dict),
                       session.run(self.biases_max, feed_dict=feed_dict))
 
+def euclidean_distance(args, batch_input, train_inputs):
+    delta = batch_input[:, tf.newaxis, :] - train_inputs[tf.newaxis, :, :]
+    return tf.reduce_sum(delta ** 2, axis=-1) ** 0.5
+
 def cosine_distance(args, batch_input, train_inputs):
     left = tf.nn.l2_normalize(batch_input, 1)
     right = tf.nn.l2_normalize(train_inputs, 1)
@@ -315,6 +319,7 @@ class AnalogyBasedEstimation(Model):
 
     RUNNER = FullTrainRunner
     _distances = {
+        'euclidean': euclidean_distance,
         'cosine': cosine_distance,
         'minkowsky': minkowsky_distance
     }
@@ -366,10 +371,8 @@ class AnalogyBasedEstimation(Model):
         magnitude = tf.divide(tf.abs(tf.subtract(self.y_labels, outputs)),
                               tf.add(self.y_labels, 1))
 
-        pred = tf.divide(tf.reduce_sum(tf.cast(tf.less(magnitude, self.args.pred), tf.int32)), tf.shape(self.y_labels)[0])
-
         self._train_ops.append(distance)
-        self._train_ops.append(pred)
+        self._train_ops.append(magnitude)
 
     def log_evaluation(self, session, feed_dict):
         logging.debug('Values: %r Indices: %r',
