@@ -10,7 +10,7 @@ pipeline {
     }
 
     parameters {
-        string(name: 'PREDICTION_ARGS', defaultValue: '--label "round(done_story_points)" --roll-sprints 3 --roll-labels --replace-na --model abe --test-interval 100 --num-epochs 100 --no-stratified-split --learning-rate 0.1 --test-size 0.2 --assign "over_value=velocity>avg_velocity" --assign "over_expectation=done_story_points-num_story_points" --assign "number_of_devs=where(number_of_vcs_devs > 0, number_of_vcs_devs, mean(number_of_jira_devs, number_of_seats))" --index sprint_days,num_story_points,num_weighted_points,num_links,num_comments,avg_concurrent_progress --keep-index num_story_points --exponent 2 --distance cosine --assign sprint_is_open=1-sprint_is_closed --validation-index sprint_is_open', description: 'Prediction arguments')
+        string(name: 'PREDICTION_ARGS', defaultValue: '--label "round(done_story_points)" --roll-sprints 3 --roll-labels --replace-na --model abe --test-interval 100 --num-epochs 100 --no-stratified-split --learning-rate 0.1 --test-size 0.2 --assign "over_value=velocity-avg_velocity" --assign "over_expectation=done_story_points-num_story_points" --assign "number_of_devs=where(number_of_vcs_devs > 0, number_of_vcs_devs, mean(number_of_jira_devs, number_of_seats))" --index time,sprint_days,num_story_points,num_weighted_points,num_links,num_comments,avg_concurrent_progress --keep-index num_story_points --exponent 2 --distance euclidean --assign sprint_is_open=1-sprint_is_closed --validation-index sprint_is_open', description: 'Prediction arguments')
         string(name: 'PREDICTION_ORGANIZATIONS', defaultValue: "${env.PREDICTION_ORGANIZATIONS}", description: 'Organizations to include in prediction')
     }
     options {
@@ -77,7 +77,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
-                    sh "/bin/bash -cex \"rm -rf \$WORKSPACE/output; mkdir \$WORKSPACE/output; cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript features.r --core --log INFO --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output \$WORKSPACE/output --filename sprint_features.${env.BUILD_TAG}.arff --append --org \\\$org; done\""
+                    sh "/bin/bash -cex \"rm -rf \$WORKSPACE/output; mkdir \$WORKSPACE/output; cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript features.r --core --log INFO --time --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output \$WORKSPACE/output --filename sprint_features.${env.BUILD_TAG}.arff --append --org \\\$org; done\""
                 }
             }
         }
