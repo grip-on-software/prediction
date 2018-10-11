@@ -711,14 +711,17 @@ class Dataset(object):
                 # Only loop through the validation set once and remain order.
                 if data_set == self.VALIDATION:
                     num_epochs = 1
+                    capacity = len(self.data_sets[data_set][0])
                     shuffle = False
                 else:
                     num_epochs = self.args.num_epochs
+                    capacity = 32
                     shuffle = True
 
                 inputs, labels, weights, indexes = \
                     tf.train.slice_input_producer([inputs, labels, weights, indexes],
                                                   num_epochs=num_epochs,
+                                                  capacity=capacity,
                                                   shuffle=shuffle,
                                                   seed=self.args.seed)
 
@@ -727,6 +730,7 @@ class Dataset(object):
                         1/float(self.num_labels) for _ in range(self.num_labels)
                     ]
                     kwargs = {
+                        'queue_capacity': capacity,
                         'init_probs': self.ratios,
                         'threads_per_queue': self.args.num_threads
                     }
@@ -741,6 +745,7 @@ class Dataset(object):
                     inputs, labels, weights, indexes = \
                         tf.train.batch([inputs, labels, weights, indexes],
                                        batch_size=self.args.batch_size,
+                                       capacity=capacity,
                                        num_threads=self.args.num_threads,
                                        allow_smaller_final_batch=True)
 

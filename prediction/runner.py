@@ -221,6 +221,7 @@ class TFRunner(Runner):
                 validation_batch = self._build_feed(validation_batch_ops,
                                                     dataset=datasets.VALIDATION)
                 labels.append(self._validate(validation_batch))
+                self._model.log_evaluation(self._session, validation_batch)
                 for key, values in self._model.validation_results.items():
                     results.setdefault(key, [])
                     result = self._session.run(values,
