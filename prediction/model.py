@@ -339,6 +339,7 @@ class AnalogyBasedEstimation(Model):
         self.values = None
         self.indices = None
         self.labels = None
+        self._pred = None
 
     @classmethod
     def add_arguments(cls, parser):
@@ -366,10 +367,16 @@ class AnalogyBasedEstimation(Model):
                                  label_shape)
         outputs = tf.reduce_mean(self.labels, axis=1)
 
-        # No specialized train op yet; select indices within op
+        # No specialized train op yet; select indices within op and use MMRE
         self._outputs = tf.one_hot(outputs, self.num_labels)
         magnitude = tf.divide(tf.abs(tf.subtract(self.y_labels, outputs)),
                               tf.add(self.y_labels, 1))
+
+        # Calculate the Pred(x) metric for evaluation logging.
+        self._pred = tf.divide(tf.reduce_sum(tf.cast(tf.less(magnitude,
+                                                             self.args.pred),
+                                                     tf.int32)),
+                               tf.shape(self.y_labels)[0])
 
         self._train_ops.append(distance)
         self._train_ops.append(magnitude)
@@ -380,6 +387,8 @@ class AnalogyBasedEstimation(Model):
                       session.run(self.indices, feed_dict=feed_dict))
         logging.debug('Labels: %r',
                       session.run(self.labels, feed_dict=feed_dict))
+        logging.info('Pred(%f): %f', self.args.pred,
+                     session.run(self._pred, feed_dict=feed_dict))
 
     @property
     def validation_results(self):
