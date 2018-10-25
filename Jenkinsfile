@@ -10,7 +10,7 @@ pipeline {
     }
 
     parameters {
-        string(name: 'PREDICTION_ARGS', defaultValue: '--label "round(done_story_points)" --roll-sprints 3 --roll-labels --replace-na --model abe --test-interval 100 --num-epochs 100 --no-stratified-split --learning-rate 0.1 --test-size 0.2 --index time,sprint_days,num_story_points,num_weighted_points,num_links,num_comments,avg_concurrent_progress,over_value,over_expectation,number_of_devs --keep-index num_story_points,sprint_is_open --exponent 2 --distance euclidean --validation-index sprint_is_open', description: 'Prediction arguments')
+        string(name: 'PREDICTION_ARGS', defaultValue: '--label "round(done_story_points)" --roll-sprints 3 --roll-labels --replace-na --model abe --test-interval 100 --num-epochs 100 --no-stratified-split --learning-rate 0.1 --test-size 0.2 --index time,sprint_days,num_story_points,num_weighted_points,num_links,num_comments,avg_concurrent_progress,over_value,over_expectation,number_of_devs,sprint_is_open --keep-index num_story_points --exponent 2 --distance euclidean --validation-index sprint_is_open', description: 'Prediction arguments')
         string(name: 'PREDICTION_ORGANIZATIONS', defaultValue: "${env.PREDICTION_ORGANIZATIONS}", description: 'Organizations to include in prediction')
     }
     options {
