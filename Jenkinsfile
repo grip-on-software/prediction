@@ -2,6 +2,10 @@ pipeline {
     agent { label 'docker' }
 
     environment {
+        COLLECTOR_IMAGE = "${env.DOCKER_REGISTRY}/gros-data-analysis-dashboard"
+        PREDICTOR_TAG = env.BRANCH_NAME.replaceFirst('^master$', 'latest')
+        PREDICTOR_NAME = "${env.DOCKER_REGISTRY}/gros-prediction"
+        PREDICTOR_IMAGE = "${env.PREDICTOR_NAME}:${env.AGENT_TAG}"
         GITLAB_TOKEN = credentials('prediction-gitlab-token')
     }
 
@@ -31,10 +35,21 @@ pipeline {
     }
 
     stages {
+        stage('Build') {
+            steps {
+                checkout scm
+                sh 'docker build -t $PREDICTOR_IMAGE .'
+            }
+        }
+        stage('Push') {
+            steps {
+                sh 'docker push $PREDICTOR_IMAGE'
+            }
+        }
         stage('Collect') {
             agent {
                 docker {
-                    image '$DOCKER_REGISTRY/gros-data-analysis-dashboard'
+                    image '$COLLECTOR_IMAGE'
                     reuseNode true
                 }
             }
@@ -47,7 +62,7 @@ pipeline {
         stage('Predict') {
             agent {
                 docker {
-                    image 'tensorflow/tensorflow:1.12.0-py3'
+                    image '$PREDICTOR_IMAGE'
                     reuseNode true
                 }
             }
@@ -60,7 +75,7 @@ pipeline {
         stage('Format') {
             agent {
                 docker {
-                    image '$DOCKER_REGISTRY/gros-data-analysis-dashboard'
+                    image '$COLLECTOR_IMAGE'
                     reuseNode true
                 }
             }

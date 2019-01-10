@@ -10,3 +10,7 @@
 *.yml
 *.crt
 profile.txt
+.dockerignore
+.gitignore
+prediction/
+*.py
