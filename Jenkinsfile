@@ -47,7 +47,7 @@ pipeline {
         stage('Predict') {
             agent {
                 docker {
-                    image 'tensorflow/tensorflow:1.3.0'
+                    image 'tensorflow/tensorflow:1.12.0-py3'
                     reuseNode true
                 }
             }
