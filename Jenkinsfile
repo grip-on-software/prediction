@@ -53,7 +53,7 @@ pipeline {
             }
             steps {
                 sh 'pip install --prefix /tmp/local virtualenv'
-                sh 'PYTHONPATH=/tmp/local/lib/python2.7/site-packages /tmp/local/bin/virtualenv --system-site-packages /tmp/venv'
+                sh 'PYTHONPATH=/tmp/local/lib/python3.5/site-packages /tmp/local/bin/virtualenv --system-site-packages /tmp/venv'
                 sh ". /tmp/venv/bin/activate; pip install -r requirements.txt; python tensor.py --filename output/sprint_features.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.json"
             }
         }
