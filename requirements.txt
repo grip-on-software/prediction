@@ -2,7 +2,7 @@ expression-parser
 keras
 keyring
 numpy
-pyocclient
+git+https://github.com/owncloud/pyocclient.git@aa6b4374a779bf0f9e060117b2e8d1e810342bc8#egg=pyocclient
 pyyaml
 scipy
 scikit-learn
