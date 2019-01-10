@@ -1,4 +1,5 @@
-FROM tensorflow/tensorflow:1.12.0-py3
+ARG TENSORFLOW_VERSION=1.12.0-py3
+FROM tensorflow/tensorflow:${TENSORFLOW_VERSION}
 
 # Install dependencies
 COPY requirements.txt /tmp/
