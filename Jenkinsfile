@@ -5,7 +5,7 @@ pipeline {
         COLLECTOR_IMAGE = "${env.DOCKER_REGISTRY}/gros-data-analysis-dashboard"
         PREDICTOR_TAG = env.BRANCH_NAME.replaceFirst('^master$', 'latest')
         PREDICTOR_NAME = "${env.DOCKER_REGISTRY}/gros-prediction"
-        PREDICTOR_IMAGE = "${env.PREDICTOR_NAME}:${env.AGENT_TAG}"
+        PREDICTOR_IMAGE = "${env.PREDICTOR_NAME}:${env.PREDICTOR_TAG}"
         GITLAB_TOKEN = credentials('prediction-gitlab-token')
     }
 
