@@ -35,7 +35,7 @@ def get_parser():
     parser.add_argument('--combinations', default=False, type=int, nargs='?',
                         const=3, help='Make combinations of number of attributes')
     parser.add_argument('--max-combinations', dest='max_combinations', type=int,
-                        default=sys.maxint**2,
+                        default=sys.maxsize,
                         help='Number of combinations to try before giving up')
     parser.add_argument('--label', default=None,
                         help='Attribute to use instead as label')

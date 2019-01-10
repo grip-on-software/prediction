@@ -469,7 +469,7 @@ class Dataset(object):
                 inputs, labels, weights = [
                     tf.constant(item) for item in self.data_sets[data_set][0:3]
                 ]
-                indexes = tf.constant(range(len(self.data_sets[data_set][0])))
+                indexes = tf.constant(list(range(len(self.data_sets[data_set][0]))))
 
                 # Only loop through the validation set once and remain order.
                 if data_set == self.VALIDATION:
