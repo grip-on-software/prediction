@@ -10,7 +10,8 @@ pipeline {
     }
 
     parameters {
-        string(name: 'PREDICTION_ARGS', defaultValue: '--label "round(done_story_points)" --roll-sprints 3 --roll-labels --replace-na --model abe --test-interval 100 --num-epochs 100 --no-stratified-split --learning-rate 0.1 --test-size 0.2 --index time,sprint_days,num_story_points,num_weighted_points,num_links,num_comments,avg_concurrent_progress,over_value,over_expectation,number_of_devs,sprint_is_open --keep-index num_story_points --exponent 2 --distance euclidean --validation-index sprint_is_open', description: 'Prediction arguments')
+        string(name: 'SELECT_FEATURES', defaultValue: 'sprint_days,num_story_points,num_weighted_points,num_links,num_comments,avg_concurrent_progress,over_value,over_expectation,number_of_devs,sprint_is_open')
+        string(name: 'PREDICTION_ARGS', defaultValue: '--label "round(done_story_points)" --roll-sprints 3 --roll-labels --replace-na --model abe --test-interval 100 --num-epochs 100 --no-stratified-split --learning-rate 0.1 --test-size 0.2 --keep-index num_story_points --exponent 2 --distance euclidean --validation-index sprint_is_open', description: 'Prediction arguments')
         string(name: 'PREDICTION_ORGANIZATIONS', defaultValue: "${env.PREDICTION_ORGANIZATIONS}", description: 'Organizations to include in prediction')
     }
     options {
@@ -77,7 +78,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
-                    sh "/bin/bash -cex \"rm -rf \$WORKSPACE/output; mkdir \$WORKSPACE/output; cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript features.r --core --log INFO --time --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output \$WORKSPACE/output --filename sprint_features.${env.BUILD_TAG}.arff --append --org \\\$org; done\""
+                    sh "/bin/bash -cex \"rm -rf \$WORKSPACE/output; mkdir \$WORKSPACE/output; cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript features.r --core --log INFO --time --features sprint_is_closed,sprint_is_complete,number_of_vcs_devs,number_of_jira_devs,number_of_seats,done_story_points,done_bug_points,num_story_points,velocity_three,sprint_weekdays,num_done_stories,other_done_issues,backlog_story_points,backlog_expected_story_points,${params.SELECT_FEATURES} --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output \$WORKSPACE/output --filename sprint_features.${env.BUILD_TAG}.arff --append --org \\\$org; done\""
                 }
             }
         }
@@ -116,7 +117,7 @@ pipeline {
                 }
             }
             steps {
-                sh "python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.${env.BUILD_TAG}.json"
+                sh "python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --index time,${params.SELECT_FEATURES} --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.${env.BUILD_TAG}.json"
             }
         }
         stage('Predict remote GPU') {
@@ -136,7 +137,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'prediction-config', variable: 'PREDICTOR_CONFIGURATION')]) {
-                    sh "CUDA_VISIBLE_DEVICES=${env.EXECUTOR_NUMBER} python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.${env.BUILD_TAG}.json --store owncloud --device /gpu:${env.EXECUTOR_NUMBER} --config $PREDICTOR_CONFIGURATION"
+                    sh "CUDA_VISIBLE_DEVICES=${env.EXECUTOR_NUMBER} python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --clean  --index time,${params.SELECT_FEATURES} ${params.PREDICTION_ARGS} --results output/sprint_labels.${env.BUILD_TAG}.json --store owncloud --device /gpu:${env.EXECUTOR_NUMBER} --config $PREDICTOR_CONFIGURATION"
                 }
             }
         }
