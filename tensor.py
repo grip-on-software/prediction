@@ -24,6 +24,8 @@ def get_parser():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--filename', default='sprint_features.arff',
                         help='ARFF file to read training data from')
+    parser.add_argument('--config', default='config.yml',
+                        help='File to read store configuration from')
     parser.add_argument('--store', default='local',
                         help='Store type to use to load the file from')
     parser.add_argument('--index', default=None, nargs='*',

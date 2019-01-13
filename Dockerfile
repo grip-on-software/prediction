@@ -5,5 +5,6 @@ FROM tensorflow/tensorflow:${TENSORFLOW_VERSION}
 COPY requirements.txt /tmp/
 
 RUN apt-get update && apt-get install -y --no-install-recommends git && \
-    cd /tmp/ && pip install -r requirements.txt && \
+    cd /tmp/ && sed -i 's/^tensorflow/#tensorflow/' requirements.txt && \
+    pip install -r requirements.txt && \
     apt-get clean && rm -rf /var/lib/apt/lists/*

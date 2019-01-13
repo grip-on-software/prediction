@@ -4,7 +4,7 @@ Abstraction layer for file reading and writing.
 We support local file reads as well as ownCloud communication.
 """
 
-from io import BytesIO
+from io import StringIO
 import keyring
 import owncloud
 import yaml
@@ -16,6 +16,7 @@ def get_file_opener(args):
     """
 
     if args.store == 'owncloud':
+        OwnCloudFile.get_config(args.config)
         return OwnCloudFile
     if args.store == 'local':
         return open
@@ -28,25 +29,65 @@ class OwnCloudFile(object):
     """
 
     _config = None
+    _client = None
+
+    @classmethod
+    def get_config(cls, config_filename='config.yml'):
+        """
+        Load configuration for ownCloud from the provided configuration
+        filename.
+        """
+
+        if cls._config is None:
+            with open(config_filename) as config_file:
+                cls._config = yaml.load(config_file).get('owncloud')
+
+        return cls._config
+
+    @classmethod
+    def clear_config(cls):
+        """
+        Clear the currently loaded configuration, if any, such as to allow
+        loading from a different configuration file.
+        """
+
+        cls._config = None
+        cls._client = None
+
+    @classmethod
+    def _get_client(cls):
+        """
+        Retrieve the ownCloud client.
+        """
+
+        if cls._client is None:
+            config = cls.get_config()
+            cls._client = owncloud.Client(config.get('url'),
+                                          verify_certs=config.get('verify'))
+
+            username = config.get('username')
+            if config.get('keychain'):
+                password = keyring.get_password('owncloud', username)
+            else:
+                password = config.get('password')
+
+            cls._client.login(username, password)
+
+        return cls._client
+
+    @classmethod
+    def remove(cls, path):
+        """
+        Remove a path from the ownCloud store.
+        """
+
+        client = cls._get_client()
+        client.delete(path)
 
     def __init__(self, path, mode='r'):
         self._path = path
         self._mode = mode
 
-        if self._config is None:
-            with open('config.yml') as config_file:
-                self._config = yaml.load(config_file).get('owncloud')
-
-        self._client = owncloud.Client(self._config['url'],
-                                       verify_certs=self._config.get('verify'))
-
-        username = self._config['username']
-        if self._config.get('keychain'):
-            password = keyring.get_password('owncloud', username)
-        else:
-            password = self._config['password']
-
-        self._client.login(username, password)
         self._stream = None
 
     @property
@@ -67,14 +108,16 @@ class OwnCloudFile(object):
 
     def __enter__(self):
         if self._mode == 'w':
-            self._stream = BytesIO()
+            self._stream = StringIO()
         else:
-            self._stream = BytesIO(self._client.get_file_contents(self._path))
+            contents = self._get_client().get_file_contents(self._path)
+            self._stream = StringIO(contents.decode("utf-8"))
 
         return self._stream
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._mode == 'w':
-            self._client.put_file_contents(self._path, self._stream.getvalue())
+            contents = self._stream.getvalue().encode("utf-8")
+            self._get_client().put_file_contents(self._path, contents)
 
         self._stream.close()

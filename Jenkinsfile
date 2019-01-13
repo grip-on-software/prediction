@@ -2,9 +2,9 @@ pipeline {
     agent { label 'docker' }
 
     environment {
-        COLLECTOR_IMAGE = "${env.DOCKER_REGISTRY}/gros-data-analysis-dashboard"
+        COLLECTOR_IMAGE = "gros-data-analysis-dashboard"
         PREDICTOR_TAG = env.BRANCH_NAME.replaceFirst('^master$', 'latest')
-        PREDICTOR_NAME = "${env.DOCKER_REGISTRY}/gros-prediction"
+        PREDICTOR_NAME = "gros-prediction"
         PREDICTOR_IMAGE = "${env.PREDICTOR_NAME}:${env.PREDICTOR_TAG}"
         GITLAB_TOKEN = credentials('prediction-gitlab-token')
     }
@@ -38,18 +38,22 @@ pipeline {
         stage('Build') {
             steps {
                 checkout scm
-                sh 'docker build -t $PREDICTOR_IMAGE . --build-arg TENSORFLOW_VERSION=$TENSORFLOW_VERSION'
+                sh 'docker build -t $DOCKER_REPOSITORY/$PREDICTOR_IMAGE . --build-arg TENSORFLOW_VERSION=$TENSORFLOW_VERSION'
             }
         }
         stage('Push') {
             steps {
-                sh 'docker push $PREDICTOR_IMAGE'
+                withDockerRegistry(credentialsId: 'docker-credentials', url: env.DOCKER_URL) {
+                    sh 'docker push $DOCKER_REPOSITORY/$PREDICTOR_IMAGE'
+                }
             }
         }
         stage('Collect') {
             agent {
                 docker {
                     image '$COLLECTOR_IMAGE'
+                    registryUrl "${env.DOCKER_URL}"
+                    registryCredentialsId 'docker-credentials'
                     reuseNode true
                 }
             }
@@ -59,10 +63,37 @@ pipeline {
                 }
             }
         }
-        stage('Predict') {
+        stage('Upload') {
+            when {
+                beforeAgent true
+                environment name: 'PREDICTOR_REMOTE', value: 'true'
+            }
             agent {
                 docker {
                     image '$PREDICTOR_IMAGE'
+                    registryUrl "${env.DOCKER_URL}"
+                    registryCredentialsId 'docker-credentials'
+                    args '-v /usr/local/share/ca-certificates/:/usr/local/share/ca-certificates/'
+                    label 'master'
+                    reuseNode true
+                }
+            }
+            steps {
+                withCredentials([file(credentialsId: 'prediction-config', variable: 'PREDICTOR_CONFIGURATION')]) {
+                    sh "python files.py --upload output/sprint_features.arff --config $PREDICTOR_CONFIGURATION"
+                }
+            }
+        }
+        stage('Predict') {
+            when {
+                beforeAgent true
+                not { environment name: 'PREDICTOR_REMOTE', value: 'true' }
+            }
+            agent {
+                docker {
+                    image '$PREDICTOR_IMAGE'
+                    registryUrl "${env.DOCKER_URL}"
+                    registryCredentialsId 'docker-credentials'
                     reuseNode true
                 }
             }
@@ -70,10 +101,53 @@ pipeline {
                 sh "python tensor.py --filename output/sprint_features.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.json"
             }
         }
+        stage('Predict remote GPU') {
+            when {
+                beforeAgent true
+                environment name: 'PREDICTOR_REMOTE', value: 'true'
+            }
+            agent {
+                docker {
+                    image '$PREDICTOR_IMAGE'
+                    registryUrl "${env.DOCKER_URL}"
+                    registryCredentialsId 'docker-credentials'
+                    args '--runtime=nvidia -v /usr/local/share/ca-certificates/:/usr/local/share/ca-certificates/'
+                    label 'gpu'
+                }
+            }
+            steps {
+                withCredentials([file(credentialsId: 'prediction-config', variable: 'PREDICTOR_CONFIGURATION')]) {
+                    sh "python tensor.py --filename output/sprint_features.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.json --store owncloud --device /gpu:0 --config $PREDICTOR_CONFIGURATION"
+                }
+            }
+        }
+        stage('Download') {
+            when {
+                beforeAgent true
+                environment name: 'PREDICTOR_REMOTE', value: 'true'
+            }
+            agent {
+                docker {
+                    image '$PREDICTOR_IMAGE'
+                    registryUrl "${env.DOCKER_URL}"
+                    registryCredentialsId 'docker-credentials'
+                    args '-v /usr/local/share/ca-certificates/:/usr/local/share/ca-certificates/'
+                    label 'master'
+                    reuseNode true
+                }
+            }
+            steps {
+                withCredentials([file(credentialsId: 'prediction-config', variable: 'PREDICTOR_CONFIGURATION')]) {
+                    sh "python files.py --download output/sprint_labels.json --remove output/sprint_features.arff output/sprint_labels.json --config $PREDICTOR_CONFIGURATION"
+                }
+            }
+        }
         stage('Format') {
             agent {
                 docker {
                     image '$COLLECTOR_IMAGE'
+                    registryUrl "${env.DOCKER_URL}"
+                    registryCredentialsId 'docker-credentials'
                     reuseNode true
                 }
             }
