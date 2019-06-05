@@ -296,9 +296,14 @@ class TFEstimatorRunner(Runner):
             logging.exception('Could not evaluate test set')
             metrics = None
 
-        outputs = \
-            next(self._model.predictor.predict(_get_validation_input,
-                                               yield_single_examples=False))
+        samples = self._model.predictor.predict(_get_validation_input)
+        outputs = {"class_ids": [], "probabilities": [], "logits": []}
+        for sample in samples:
+            for key in outputs:
+                outputs[key].append(sample[key])
+
+        for key in outputs:
+            outputs[key] = np.array(outputs[key])
 
         logging.info('Outputs: %r', outputs)
         indexes = np.squeeze(outputs["class_ids"])
