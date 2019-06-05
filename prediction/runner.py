@@ -11,10 +11,6 @@ import numpy as np
 import sklearn.metrics
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
-try:
-    from tensorflow.contrib.learn.python.learn.estimators.prediction_key import PredictionKey
-except ImportError:
-    raise
 
 class Runner(object):
     """
@@ -249,9 +245,9 @@ class FullTrainRunner(TFRunner):
         })
         return feed_dict
 
-class TFLearnRunner(Runner):
+class TFEstimatorRunner(Runner):
     """
-    Runner for TensorFlow Learn models.
+    Runner for TensorFlow estimator models.
     """
 
     def _get_input(self, datasets, data_set):
@@ -271,13 +267,20 @@ class TFLearnRunner(Runner):
         def _get_test_input():
             return self._get_input(datasets, datasets.TEST)
 
-        monitor_class = tf.contrib.learn.monitors.ValidationMonitor
-        monitor = monitor_class(input_fn=_get_test_input,
-                                every_n_steps=self.args.test_interval)
+        hooks = []
+        step = tf.train.StepCounterHook(every_n_steps=self.args.train_interval,
+                                        output_dir=self.args.train_directory)
+        hooks.append(step)
 
-        self._model.predictor.fit(input_fn=_get_train_input,
-                                  steps=self.args.num_epochs,
-                                  monitors=[monitor])
+        # Create a saver for writing training checkpoints.
+        if self.args.save:
+            cpt = tf.train.CheckpointSaverHook(self.args.train_directory,
+                                               save_steps=self.args.test_interval)
+            hooks.append(cpt)
+
+        self._model.predictor.train(_get_train_input,
+                                    steps=self.args.num_epochs,
+                                    hooks=hooks)
 
     def evaluate(self, datasets):
         def _get_test_input():
@@ -286,24 +289,24 @@ class TFLearnRunner(Runner):
         def _get_validation_input():
             return self._get_input(datasets, datasets.VALIDATION)
 
-        metrics = self._model.predictor.evaluate(input_fn=_get_test_input)
+        try:
+            metrics = self._model.predictor.evaluate(_get_test_input)
+            logging.info('Metrics: %r', metrics)
+        except tf.errors.InvalidArgumentError:
+            logging.exception('Could not evaluate test set')
+            metrics = None
 
         outputs = \
-            self._model.predictor.predict(input_fn=_get_validation_input,
-                                          outputs=[
-                                              PredictionKey.LOGITS,
-                                              PredictionKey.CLASSES,
-                                              PredictionKey.PROBABILITIES
-                                          ],
-                                          as_iterable=False)
+            next(self._model.predictor.predict(_get_validation_input,
+                                               yield_single_examples=False))
 
         logging.info('Outputs: %r', outputs)
-        probabilities = datasets.choose(outputs[PredictionKey.CLASSES][np.newaxis, :],
-                                        outputs[PredictionKey.PROBABILITIES])
-        risk = self._scale_logits(outputs[PredictionKey.LOGITS])
+        indexes = np.squeeze(outputs["class_ids"])
+        probabilities = datasets.choose(indexes, outputs["probabilities"])
+        risk = self._scale_logits(outputs["logits"])
 
         return {
-            "labels": outputs[PredictionKey.CLASSES],
+            "labels": indexes,
             "probabilities": probabilities,
             "risks": risk,
             "metrics": metrics

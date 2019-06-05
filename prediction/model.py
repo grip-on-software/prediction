@@ -6,7 +6,7 @@ import math
 import tensorflow as tf
 import keras.models as km
 import keras.layers as kl
-from .runner import TFRunner, TFLearnRunner, TFSKLRunner, KerasRunner, FullTrainRunner
+from .runner import TFRunner, TFEstimatorRunner, TFSKLRunner, KerasRunner, FullTrainRunner
 
 class Model(object):
     """
@@ -325,18 +325,18 @@ class AnalogyBasedEstimation(Model):
         self._train_ops.append(distance)
         self._train_ops.append(pred)
 
-class LearnModel(Model):
+class EstimatorModel(Model):
     """
-    Model based on a TensorFlow Learn estimator.
+    Model based on a TensorFlow estimator.
     """
 
-    RUNNER = TFLearnRunner
+    RUNNER = TFEstimatorRunner
 
     INPUT_COLUMN = "x"
     WEIGHT_COLUMN = "weight"
 
     def __init__(self, args, dtypes, sizes):
-        super(LearnModel, self).__init__(args, dtypes, sizes)
+        super(EstimatorModel, self).__init__(args, dtypes, sizes)
         self.predictor = None
         self.columns = [
             tf.contrib.layers.real_valued_column(self.INPUT_COLUMN,
@@ -353,9 +353,9 @@ class LearnModel(Model):
         raise NotImplementedError('Must be implemented by subclasses')
 
 @Model.register('dnn')
-class DNNModel(LearnModel):
+class DNNModel(EstimatorModel):
     """
-    Deep neural network model from TFLearn.
+    Deep neural network model from tf.estimator.
     """
 
     @classmethod
@@ -366,10 +366,10 @@ class DNNModel(LearnModel):
                            help='Number of units per hidden layer')
 
     def build(self):
-        run_config = tf.contrib.learn.RunConfig(save_checkpoints_steps=self.args.train_interval,
-                                                keep_checkpoint_max=self.args.num_checkpoints,
-                                                model_dir=self.args.train_directory,
-                                                tf_random_seed=self.args.seed)
+        run_config = tf.estimator.RunConfig(save_checkpoints_steps=self.args.train_interval,
+                                            keep_checkpoint_max=self.args.num_checkpoints,
+                                            model_dir=self.args.train_directory,
+                                            tf_random_seed=self.args.seed)
 
         if self.args.weighted:
             weight_column = self.WEIGHT_COLUMN
@@ -377,14 +377,14 @@ class DNNModel(LearnModel):
             weight_column = None
 
         self.predictor = \
-            tf.contrib.learn.DNNClassifier(hidden_units=self.args.hiddens,
-                                           feature_columns=self.columns,
-                                           n_classes=self.num_labels,
-                                           weight_column_name=weight_column,
-                                           config=run_config)
+            tf.estimator.DNNClassifier(hidden_units=self.args.hiddens,
+                                       feature_columns=self.columns,
+                                       n_classes=self.num_labels,
+                                       weight_column=weight_column,
+                                       config=run_config)
 
 @Model.register('dbn')
-class DBNModel(LearnModel):
+class DBNModel(EstimatorModel):
     """
     Deep belief network classifier.
     """
