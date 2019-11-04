@@ -7,4 +7,5 @@ pyyaml
 scipy
 scikit-learn
 secretstorage
+simplejson
 tensorflow

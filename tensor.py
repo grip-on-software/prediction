@@ -4,12 +4,12 @@ Classification and prediction models for sprint features.
 
 from __future__ import print_function
 import argparse
-import json
 import logging
 import random
 import sys
 import numpy as np
 import tensorflow as tf
+import simplejson
 from prediction.cleaner import Cleaner
 from prediction.dataset import Dataset
 from prediction.files import get_file_opener
@@ -162,7 +162,8 @@ class Classification(object):
 
         file_opener = get_file_opener(self.args)
         with file_opener(self.args.results, 'w') as results_file:
-            json.dump(results, results_file, default=serialize_json)
+            simplejson.dump(results, results_file, default=serialize_json,
+                            ignore_nan=True)
 
     def run_session(self, model, test_ops, data_sets):
         """
