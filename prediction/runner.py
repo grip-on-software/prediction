@@ -319,7 +319,7 @@ class TFEstimatorRunner(Runner):
 
     @staticmethod
     def _scale_logits(logits):
-        logits = np.squeeze(logits)
+        logits = np.nan_to_num(np.squeeze(logits))
         neg_scaler = MinMaxScaler((0.1, 0.49), copy=True)
         pos_scaler = MinMaxScaler((0.5, 0.99), copy=True)
 
