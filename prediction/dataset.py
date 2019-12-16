@@ -352,7 +352,7 @@ class Dataset(object):
         # training in normally weighted neural networks.
         scaler = MinMaxScaler((0, 1), copy=True)
         train_data = datasets[self.TRAIN]
-        scaler.fit(train_data[~np.isnan(train_data).any(axis=1)])
+        scaler.fit(train_data[np.isfinite(train_data).all(axis=1)])
 
         return [dataset * scaler.scale_ + scaler.min_ for dataset in datasets]
 
