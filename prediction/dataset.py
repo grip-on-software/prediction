@@ -668,8 +668,8 @@ class Dataset(object):
 
             logging.info('%r', dataset[0, :])
             if self._times is None:
-                self._times = (current_time
-                               for current_time in set(dataset[:, time_index])
+                times = set(dataset[:, time_index, self.args.time_bin])
+                self._times = (current_time for current_time in times
                                if self._check_time_sets(dataset, time_index,
                                                         current_time))
             current_time = next(self._times)

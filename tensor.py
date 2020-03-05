@@ -99,6 +99,8 @@ def get_parser():
     parser.add_argument('--time', help='Split dataset based on time feature')
     parser.add_argument('--time-size', dest='time_size', type=int,
                         default=10, help='Minimal size of time dataset')
+    parser.add_argument('--time-bin', dest='time_bin', type=int,
+                        default=10, help='Bin size of time dataset')
     parser.add_argument('--no-stratified-split', dest='stratified_split',
                         default=True, action='store_false',
                         help='Do not create proportionally balanced sets')
