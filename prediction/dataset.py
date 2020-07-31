@@ -53,7 +53,7 @@ class Loader(object):
         label_indexes.update(self._translate(parser.used_variables, translation))
 
         if self.args.replace_na is not False:
-            column[np.isnan(column)] = self.args.replace_na
+            column[~np.isfinite(column)] = self.args.replace_na
 
         labels = column.astype(int)
 
@@ -201,7 +201,7 @@ class Loader(object):
         logging.debug('Selected combination of indexes: %r', indexes)
         dataset = self._full_data[:, tuple(indexes)]
         if self.args.replace_na is not False:
-            dataset[np.isnan(dataset)] = self.args.replace_na
+            dataset[~np.isfinite(dataset)] = self.args.replace_na
         return dataset, self._labels
 
 class Dataset(object):
