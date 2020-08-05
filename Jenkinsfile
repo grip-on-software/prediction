@@ -60,7 +60,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
-                    sh '/bin/bash -cex "rm -rf $PWD/output; mkdir $PWD/output; cd /home/docker; for org in $PREDICTION_ORGANIZATIONS; do Rscript features.r --core --log INFO --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output $PWD/output --append --org \$org; done"'
+                    sh '/bin/bash -cex "rm -rf $PWD/output; mkdir $PWD/output; cd /home/docker; for org in $PREDICTION_ORGANIZATIONS; do Rscript features.r --core --log INFO --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output $PWD/output --append --org \\$org; done"'
                 }
             }
         }
