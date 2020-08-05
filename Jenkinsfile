@@ -11,7 +11,7 @@ pipeline {
 
     parameters {
         string(name: 'PREDICTION_ARGS', defaultValue: '--label num_not_done_points+num_removed_points+num_added_points --binary --roll-sprints --roll-validation --roll-labels --replace-na --model dnn --test-interval 200 --num-epochs 1000', description: 'Prediction arguments')
-        string(name: 'PREDICTION_ORGANIZATIONS', defaultValue: '$ANALYSIS_ORGANIZATION')
+        string(name: 'PREDICTION_ORGANIZATIONS', defaultValue: "${env.ANALYSIS_ORGANIZATION}")
     }
     options {
         gitLabConnection('gitlab')
