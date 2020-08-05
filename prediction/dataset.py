@@ -113,6 +113,11 @@ class Loader(object):
             indexes = set(range(self.num_columns))
 
         indexes.discard(Dataset.PROJECT_KEY)
+        if "organization" in name_translation:
+            if name_translation["organization"] != self.num_columns - 1:
+                raise ValueError("Last column must be organization if included")
+            indexes.discard(name_translation["organization"])
+
         if self.args.remove:
             indexes -= set(self._translate(self.args.remove, name_translation))
 
@@ -178,6 +183,19 @@ class Loader(object):
         return dict(zip(self.names, self._full_data.T))
 
     @property
+    def project_split_keys(self):
+        """
+        Retrieve the column indexes of the attributes that indicate which
+        project a record belongs to. Returns the index numbers as a tuple.
+        """
+
+        if "organization" in self.names:
+            return (Dataset.PROJECT_KEY, Dataset.ORGANIZATION_KEY)
+
+        return (Dataset.PROJECT_KEY,)
+
+
+    @property
     def project_splits(self):
         """
         Retrieve the indexes of the samples in the data set at which a new
@@ -185,7 +203,7 @@ class Loader(object):
         project identifier.
         """
 
-        projects = self._full_data[:, Dataset.PROJECT_KEY]
+        projects = self._full_data[:, self.project_split_keys]
         return np.squeeze(np.argwhere(np.diff(projects) != 0) + 1)
 
     def select_data(self):
@@ -224,6 +242,7 @@ class Dataset(object):
     # Indexes in the original dataset of uniquely identifying keys
     PROJECT_KEY = 0
     SPRINT_KEY = 1
+    ORGANIZATION_KEY = -1
 
     def __init__(self, args):
         self.args = args
@@ -431,8 +450,9 @@ class Dataset(object):
             self.VALIDATION: validation
         }
 
-        logging.info('Validation sprints: %r',
-                     self.validation_context[:, (self.PROJECT_KEY, self.SPRINT_KEY)])
+        # Show properties for validation sprints that uniquely identify them.
+        keys = self._loader.project_split_keys + (self.SPRINT_KEY,)
+        logging.info('Validation sprints: %r', self.validation_context[:, keys])
 
     @property
     def num_features(self):

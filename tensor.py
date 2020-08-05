@@ -144,13 +144,25 @@ class Classification(object):
             logging.info('Predicted labels: %r', predictions)
             logging.info('Actual labels: %r', data_set[data_sets.LABELS])
 
-            keys = [
-                ("projects", data_sets.PROJECT_KEY),
-                ("sprints", data_sets.SPRINT_KEY)
-            ]
-            for result_key, validation_key in keys:
+            keys = {
+                "projects": {
+                    "key": data_sets.PROJECT_KEY,
+                    "filter": lambda projects: projects.astype(np.int)
+                },
+                "sprints": {
+                    "key": data_sets.SPRINT_KEY,
+                    "filter": lambda sprints: sprints.astype(np.int)
+                },
+                "organizations": {
+                    "key": data_sets.ORGANIZATION_KEY,
+                    "filter": lambda column: column \
+                        if "organization" in data_sets.names else None
+                }
+            }
+            for result_key, result_config in keys.items():
+                validation_key = result_config["key"]
                 validation = data_sets.validation_context[:, validation_key]
-                results[result_key] = validation.astype(np.int)
+                results[result_key] = result_config["filter"](validation)
 
             results["configuration"] = {
                 "label": self.args.label,
