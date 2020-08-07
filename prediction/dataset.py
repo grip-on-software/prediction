@@ -222,7 +222,8 @@ class Loader(object):
         """
 
         projects = self._full_data[:, self.project_split_keys]
-        return np.squeeze(np.argwhere(np.diff(projects) != 0)[:, 0] + 1)
+        splits = np.unique(np.argwhere(np.diff(projects) != 0)[:, 0])
+        return np.squeeze(splits + 1)
 
     def select_data(self):
         """
