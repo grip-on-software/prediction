@@ -102,7 +102,7 @@ class Loader(object):
 
         full_data = np.array([[translation[index].get(cell, cell)
                                for index, cell in enumerate(row)]
-                               for row in data], dtype=np.float32)
+                              for row in data], dtype=np.float32)
 
         return full_data, meta
 
@@ -222,7 +222,8 @@ class Loader(object):
         """
 
         projects = self._full_data[:, self.project_split_keys]
-        return np.squeeze(np.argwhere(np.diff(projects) != 0)[:, 0] + 1)
+        splits = np.unique(np.argwhere(np.diff(projects, axis=0) != 0)[:, 0])
+        return np.squeeze(splits + 1)
 
     def select_data(self):
         """
@@ -278,7 +279,8 @@ class Dataset(object):
     def _last_sprint_weather(cls, labels, project_splits):
         project_labels = np.split(labels, project_splits)
         return np.hstack([
-            np.hstack([np.nan, np.roll(pl, 1, axis=0)[1:]]) for pl in project_labels
+            np.hstack([np.nan, np.roll(project_label, 1, axis=0)[1:]])
+            for project_label in project_labels if project_label.size != 0
         ])
 
     @classmethod
@@ -311,7 +313,10 @@ class Dataset(object):
 
     def _get_splits(self, project_splits, dataset):
         # Get rolled splits
-        return [self._roll(p) for p in np.split(dataset, project_splits)]
+        return [
+            self._roll(project) for project in np.split(dataset, project_splits)
+            if project.size != 0
+        ]
 
     def _trim(self, projects):
         # After rolling, the first sample is always empty, but we may wish to
