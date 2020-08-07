@@ -154,7 +154,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
-                    sh '/bin/bash -cex "cd /home/docker; for org in $PREDICTION_ORGANIZATIONS; do Rscript sprint_results.r --file $PWD/output/sprint_labels.json --features $PWD/output/sprint_features.arff --config $ANALYSIS_CONFIGURATION --output $PWD/output $REPORT_PARAMS --org $org; done"'
+                    sh '/bin/bash -cex "cd /home/docker; for org in $PREDICTION_ORGANIZATIONS; do Rscript sprint_results.r --file $PWD/output/sprint_labels.json --features $PWD/output/sprint_features.arff --config $ANALYSIS_CONFIGURATION --output $PWD/output $REPORT_PARAMS --org \\$org; done"'
                 }
             }
         }
