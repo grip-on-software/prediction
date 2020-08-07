@@ -155,7 +155,8 @@ class Classification(object):
                 },
                 "organizations": {
                     "key": data_sets.ORGANIZATION_KEY,
-                    "filter": lambda column: column \
+                    "filter": lambda column: \
+                        data_sets.meta["organization"][1][column] \
                         if "organization" in data_sets.names else None
                 }
             }

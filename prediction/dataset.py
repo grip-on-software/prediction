@@ -92,8 +92,17 @@ class Loader(object):
 
         logging.debug('Metadata:\n%r', meta)
 
-        full_data = np.array([[cell for cell in row] for row in data],
-                             dtype=np.float32)
+        translation = []
+        for column in meta:
+            if meta[column][0] == 'nominal':
+                nominals = [text.encode('utf-8') for text in meta[column][1]]
+                translation.append(dict(zip(nominals, range(len(nominals)))))
+            else:
+                translation.append({})
+
+        full_data = np.array([[translation[index].get(cell, cell)
+                               for index, cell in enumerate(row)]
+                               for row in data], dtype=np.float32)
 
         return full_data, meta
 
@@ -156,6 +165,15 @@ class Loader(object):
         """
 
         return self._indexes
+
+    @property
+    def meta(self):
+        """
+        Retrieve the ARFF MetaData object describing the columns of the
+        unfiltered data set.
+        """
+
+        return self._meta
 
     @property
     def names(self):
