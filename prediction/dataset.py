@@ -473,6 +473,19 @@ class Dataset(object):
         logging.info('Validation sprints: %r', self.validation_context[:, keys])
 
     @property
+    def organizations(self):
+        """
+        Retrieve the list of organization names, ordered by the indexes as used
+        in the numeric data set. If no organizations were included in the data
+        set, then an empty list is returned.
+        """
+
+        if "organization" in self._loader.names:
+            return self._loader.meta["organization"][1]
+
+        return []
+
+    @property
     def num_features(self):
         """
         Retrieve the number of features in the data set.

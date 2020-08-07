@@ -144,6 +144,7 @@ class Classification(object):
             logging.info('Predicted labels: %r', predictions)
             logging.info('Actual labels: %r', data_set[data_sets.LABELS])
 
+            organization_names = np.array(data_sets.organizations)
             keys = {
                 "projects": {
                     "key": data_sets.PROJECT_KEY,
@@ -155,9 +156,9 @@ class Classification(object):
                 },
                 "organizations": {
                     "key": data_sets.ORGANIZATION_KEY,
-                    "filter": lambda column: \
-                        data_sets.meta["organization"][1][column] \
-                        if "organization" in data_sets.names else None
+                    "filter": lambda organizations: \
+                        organization_names[organizations.astype(np.int)] \
+                        if organization_names.size != 0 else None
                 }
             }
             for result_key, result_config in keys.items():
