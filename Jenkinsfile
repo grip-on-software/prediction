@@ -114,6 +114,7 @@ pipeline {
                     registryCredentialsId 'docker-credentials'
                     args '--runtime=nvidia -v /usr/local/share/ca-certificates/:/usr/local/share/ca-certificates/'
                     label 'gpu'
+                    alwaysPull true
                 }
             }
             steps {
