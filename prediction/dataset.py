@@ -154,8 +154,10 @@ class Loader(object):
         return next(self._combinations)
 
     def _calculate_indexes(self):
+        name_translation = self.name_tanslation
         if self.args.index:
-            indexes = SortedSet(self.translate(self.args.index))
+            indexes = SortedSet(self.translate(self.args.index,
+                                               translation=name_tanslation))
         else:
             indexes = SortedSet(range(self.num_columns))
 
@@ -167,7 +169,8 @@ class Loader(object):
             indexes.discard(name_translation["organization"])
 
         if self.args.remove:
-            indexes -= set(self.translate(self.args.remove))
+            indexes -= set(self.translate(self.args.remove,
+                                          translation=name_translation))
 
         label_indexes = set()
         if self.args.label:
