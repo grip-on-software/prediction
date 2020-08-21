@@ -159,7 +159,8 @@ class Loader(object):
         else:
             indexes = SortedSet(range(self.num_columns))
 
-        indexes.discard(Dataset.PROJECT_KEY)
+        if not self.args.project:
+            indexes.discard(Dataset.PROJECT_KEY)
         if "organization" in name_translation:
             if name_translation["organization"] != self.num_columns - 1:
                 raise ValueError("Last column must be organization if included")
@@ -240,7 +241,7 @@ class Loader(object):
         Retrieve the names of the attributes that were selected as features.
         """
 
-        return self._feature_meta.keys()
+        return list(self._feature_meta.keys())
 
     @property
     def assignments(self):
@@ -403,11 +404,6 @@ class Dataset(object):
     def _roll(self, project_data):
         rolls = []
 
-        if self.args.keep_index:
-            indexes = self._loader.translate(self.args.keep_index,
-                                             self._loader.feature_translation)
-            rolls.append(project_data[:, list(indexes)])
-
         for i in range(1, self.args.roll_sprints+1):
             rolled_data = np.roll(project_data, i, axis=0)
 
@@ -415,6 +411,11 @@ class Dataset(object):
             rolled_data[:i, :] = np.nan
 
             rolls.append(rolled_data)
+
+        if self.args.keep_index:
+            indexes = self._loader.translate(self.args.keep_index,
+                                             self._loader.feature_translation)
+            rolls.append(project_data[:, list(indexes)])
 
         return np.hstack(rolls)
 
@@ -425,20 +426,22 @@ class Dataset(object):
             if project.size != 0
         ]
 
-    def _trim(self, projects):
+    def _trim(self, projects, end=True):
         # After rolling, the first sample is always empty, but we may wish to
         # keep samples with only a few sprints worth of features.
         trim_start = 1 if self.args.keep_incomplete else self.args.roll_sprints
-        trim_end = -2 if self.args.roll_validation else -1
-        return np.vstack([p[trim_start:trim_end] for p in projects])
 
-    def _get_split_mask(self, project_splits, labels):
+        if end:
+            trim_end = -2 if self.args.roll_validation else -1
+            return np.vstack([p[trim_start:trim_end] for p in projects])
+
+        return np.vstack([p[trim_start:] for p in projects])
+
+    def _get_split_mask(self, project_splits, labels, validation_mask=None):
         split_mask = np.ones(len(labels), np.bool)
 
         # Remove labels and weather data from the normal train/test dataset for
         # removed (incomplete) samples and samples used for validation set
-        split_mask[project_splits-1] = False
-        split_mask[-1] = False
         if self.args.keep_incomplete:
             split_mask[0] = False
             split_mask[project_splits] = False
@@ -451,9 +454,14 @@ class Dataset(object):
             ])
             split_mask[project_trims] = False
 
-        if self.args.roll_validation:
-            split_mask[project_splits-2] = False
-            split_mask[-2] = False
+        if validation_mask is not None:
+            split_mask[validation_mask] = False
+        else:
+            split_mask[project_splits-1] = False
+            split_mask[-1] = False
+            if self.args.roll_validation:
+                split_mask[project_splits-2] = False
+                split_mask[-2] = False
 
         return split_mask
 
@@ -471,30 +479,57 @@ class Dataset(object):
 
         # Keep track of original indexes in the dataset, features and labels
         indexes = np.arange(len(dataset))
-        latest_indexes = np.hstack([project_splits-1, -1])
         projects = self._get_splits(project_splits, dataset)
 
-        # Obtain the correct validation rows based on whether validation
-        # features are rolled.
-        # Do not alter the indexes because the context from the full data
-        # remains the same. Labels are also not rolled.
-        if self.args.roll_validation:
-            latest_data = np.vstack([p[-1, :] for p in projects])
+        if self.args.validation_index:
+            i = next(self._loader.translate((self.args.validation_index,),
+                                            self._loader.feature_translation))
+            logging.info('validation index: %d', i)
+            logging.info('%r', dataset[0, :])
+            validation_mask = dataset[:, i] != 0
+            if self.args.roll_validation:
+                validation_mask[project_splits-2] = True
+            else:
+                validation_mask[project_splits-1] = True
+
+            latest_indexes = indexes[validation_mask]
+
+            latest_mask = self._trim(np.split(np.reshape(validation_mask,
+                                                         (dataset.shape[0], 1)),
+                                              project_splits),
+                                     end=False).flatten()
+            dataset = self._trim(projects, end=False)
+
+            logging.info('%r %r', dataset.shape, latest_mask.shape)
+
+            latest_data = dataset[latest_mask, :]
+            dataset = dataset[~latest_mask, :]
         else:
-            latest_data = np.vstack([p[-2, :] for p in projects])
+            latest_indexes = np.hstack([project_splits-1, -1])
+            # Obtain the correct validation rows based on whether validation
+            # features are rolled.
+            # Do not alter the indexes because the context from the full data
+            # remains the same. Labels are also not rolled.
+            if self.args.roll_validation:
+                latest_data = np.vstack([p[-1, :] for p in projects])
+            else:
+                latest_data = np.vstack([p[-2, :] for p in projects])
+
+            dataset = self._trim(projects)
+            latest_mask = None
 
         latest_labels = labels[latest_indexes]
 
-        dataset = self._trim(projects)
-        split_mask = self._get_split_mask(project_splits, labels)
+        split_mask = self._get_split_mask(project_splits, labels,
+                                          validation_mask=validation_mask)
 
         logging.debug('%r', split_mask)
 
         labels = labels[split_mask]
         weather = weather[split_mask]
         indexes = indexes[split_mask]
-        latest_weights = np.full(latest_labels.shape, 0.5)
-        latest = (latest_data, latest_labels, latest_weights, None, latest_indexes)
+        latest = (latest_data, latest_labels,
+                  np.full(latest_labels.shape, 0.5), None, latest_indexes)
 
         return dataset, labels, weather, latest, indexes
 

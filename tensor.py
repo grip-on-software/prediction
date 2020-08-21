@@ -32,8 +32,12 @@ def get_parser():
                         help='Attribute indexes to use from the dataset')
     parser.add_argument('--remove', default=None, nargs='*',
                         help='Attribute indexes to ignore from the dataset')
+    parser.add_argument('--project', default=False, action='store_true',
+                        help='Allow distinguishing projects in dataset')
     parser.add_argument('--assign', action='append',
                         help='Attribute to generate from other attributes')
+    parser.add_argument('--validation-index', dest='validation_index',
+                        default=None, help='Tag index for the validation set')
     parser.add_argument('--combinations', default=False, type=int, nargs='?',
                         const=3, help='Make combinations of number of attributes')
     parser.add_argument('--max-combinations', dest='max_combinations', type=int,
