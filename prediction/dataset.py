@@ -18,6 +18,12 @@ class Loader(object):
     Dataset loader.
     """
 
+    FUNCTIONS = {
+        'round': np.round,
+        'mean': lambda *a: np.mean(a, axis=0),
+        'where': np.where
+    }
+
     def __init__(self, args):
         self.args = args
 
@@ -66,7 +72,7 @@ class Loader(object):
 
     def _get_labels(self, columns):
         parser = expression.Expression_Parser(variables=columns,
-                                              functions={'round': np.round})
+                                              functions=self.FUNCTIONS)
         column = parser.parse(self.args.label)
         label_indexes = set()
         if isinstance(column, int):
@@ -96,6 +102,7 @@ class Loader(object):
         num_columns = self.num_columns
         new_columns = []
         parser = expression.Expression_Parser(variables=self.name_columns,
+                                              functions=self.FUNCTIONS,
                                               assignment=True)
         for assignment in self.args.assign:
             parser.parse(assignment)
