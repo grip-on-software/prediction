@@ -154,10 +154,10 @@ class Loader(object):
         return next(self._combinations)
 
     def _calculate_indexes(self):
-        name_translation = self.name_tanslation
+        name_translation = self.name_translation
         if self.args.index:
             indexes = SortedSet(self.translate(self.args.index,
-                                               translation=name_tanslation))
+                                               translation=name_translation))
         else:
             indexes = SortedSet(range(self.num_columns))
 
