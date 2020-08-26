@@ -11,7 +11,7 @@ pipeline {
 
     parameters {
         string(name: 'PREDICTION_ARGS', defaultValue: '--label num_not_done_points+num_removed_points+num_added_points --binary --roll-sprints --roll-validation --roll-labels --replace-na --model dnn --test-interval 200 --num-epochs 1000', description: 'Prediction arguments')
-        string(name: 'PREDICTION_ORGANIZATIONS', defaultValue: "${env.ANALYSIS_ORGANIZATION}", description: 'Organizations to include in prediction')
+        string(name: 'PREDICTION_ORGANIZATIONS', defaultValue: "${env.PREDICTION_ORGANIZATIONS}", description: 'Organizations to include in prediction')
     }
     options {
         gitLabConnection('gitlab')
@@ -60,7 +60,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
-                    sh '/bin/bash -cex "rm -rf $PWD/output; mkdir $PWD/output; cd /home/docker; for org in $PREDICTION_ORGANIZATIONS; do Rscript features.r --core --log INFO --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output $PWD/output --append --org \\$org; done"'
+                    sh "/bin/bash -cex \"rm -rf \$WORKSPACE/output; mkdir \$WORKSPACE/output; cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript features.r --core --log INFO --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output \$WORKSPACE/output --append --org \\\$org; done\""
                 }
             }
         }
@@ -155,7 +155,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
-                    sh '/bin/bash -cex "cd /home/docker; for org in $PREDICTION_ORGANIZATIONS; do Rscript sprint_results.r --file $PWD/output/sprint_labels.json --features $PWD/output/sprint_features.arff --config $ANALYSIS_CONFIGURATION --output $PWD/output $REPORT_PARAMS --org \\$org; done"'
+                    sh "/bin/bash -cex \"cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript sprint_results.r --file \$WORKSPACE/output/sprint_labels.json --features \$WORKSPACE/output/sprint_features.arff --config $ANALYSIS_CONFIGURATION --output \$WORKSPACE/output $REPORT_PARAMS --org \\\$org; done\""
                 }
             }
         }
