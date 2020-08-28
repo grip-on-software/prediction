@@ -60,7 +60,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
-                    sh "/bin/bash -cex \"rm -rf \$WORKSPACE/output; mkdir \$WORKSPACE/output; cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript features.r --core --log INFO --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output \$WORKSPACE/output --append --org \\\$org; done\""
+                    sh "/bin/bash -cex \"rm -rf \$WORKSPACE/output; mkdir \$WORKSPACE/output; cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript features.r --core --log INFO --config $ANALYSIS_CONFIGURATION $REPORT_PARAMS --output \$WORKSPACE/output --filename sprint_features.${env.BUILD_TAG}.arff --append --org \\\$org; done\""
                 }
             }
         }
@@ -81,7 +81,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'prediction-config', variable: 'PREDICTOR_CONFIGURATION')]) {
-                    sh "python files.py --upload output/sprint_features.arff --config $PREDICTOR_CONFIGURATION"
+                    sh "python files.py --upload output/sprint_features.${env.BUILD_TAG}.arff --config $PREDICTOR_CONFIGURATION"
                 }
             }
         }
@@ -99,7 +99,7 @@ pipeline {
                 }
             }
             steps {
-                sh "python tensor.py --filename output/sprint_features.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.json"
+                sh "python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.json"
             }
         }
         stage('Predict remote GPU') {
@@ -119,7 +119,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'prediction-config', variable: 'PREDICTOR_CONFIGURATION')]) {
-                    sh "python tensor.py --filename output/sprint_features.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.json --store owncloud --device /gpu:0 --config $PREDICTOR_CONFIGURATION"
+                    sh "python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.${env.BUILD_TAG}.json --store owncloud --device /gpu:${env.EXECUTOR_NUMBER} --config $PREDICTOR_CONFIGURATION"
                 }
             }
         }
@@ -140,7 +140,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'prediction-config', variable: 'PREDICTOR_CONFIGURATION')]) {
-                    sh "python files.py --download output/sprint_labels.json --remove output/sprint_features.arff output/sprint_labels.json --config $PREDICTOR_CONFIGURATION"
+                    sh "python files.py --download output/sprint_labels.${env.BUILD_TAG}.json --remove output/sprint_features.${env.BUILD_TAG}.arff output/sprint_labels.${env.BUILD_TAG}.json --config $PREDICTOR_CONFIGURATION"
                 }
             }
         }
@@ -155,7 +155,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'data-analysis-config', variable: 'ANALYSIS_CONFIGURATION')]) {
-                    sh "/bin/bash -cex \"cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript sprint_results.r --file \$WORKSPACE/output/sprint_labels.json --features \$WORKSPACE/output/sprint_features.arff --config $ANALYSIS_CONFIGURATION --output \$WORKSPACE/output $REPORT_PARAMS --org \\\$org; done\""
+                    sh "/bin/bash -cex \"cd /home/docker; for org in ${params.PREDICTION_ORGANIZATIONS}; do Rscript sprint_results.r --file \$WORKSPACE/output/sprint_labels.${env.BUILD_TAG}.json --features \$WORKSPACE/output/sprint_features.${env.BUILD_TAG}.arff --config $ANALYSIS_CONFIGURATION --output \$WORKSPACE/output $REPORT_PARAMS --org \\\$org; done\""
                 }
             }
         }
