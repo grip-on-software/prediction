@@ -99,7 +99,7 @@ pipeline {
                 }
             }
             steps {
-                sh "python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.json"
+                sh "python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.${env.BUILD_TAG}.json"
             }
         }
         stage('Predict remote GPU') {
