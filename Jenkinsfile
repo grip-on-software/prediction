@@ -24,7 +24,7 @@ pipeline {
 
     post {
         success {
-            archiveArtifacts artifacts: 'output/**/*.json', excludes: 'output/sprint_labels.json', onlyIfSuccessful: true
+            archiveArtifacts artifacts: 'output/**/*.json', excludes: 'output/sprint_labels*.json', onlyIfSuccessful: true
             updateGitlabCommitStatus name: env.JOB_NAME, state: 'success'
         }
         failure {
