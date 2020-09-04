@@ -512,7 +512,7 @@ class Dataset(object):
             if self.args.roll_validation:
                 latest_data = np.vstack([p[-1, :] for p in projects])
             else:
-                latest_data = np.vstack([p[-2, :] for p in projects])
+                latest_data = np.vstack([p[-2:, :][0, :] for p in projects])
 
             dataset = self._trim(projects)
             validation_mask = None
