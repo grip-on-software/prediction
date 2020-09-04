@@ -96,6 +96,9 @@ def get_parser():
                         help='Replace NaN values with a valid value')
     parser.add_argument('--weighted', default=False, action='store_true',
                         help='Model can use class weights for balancing')
+    parser.add_argument('--time', help='Split dataset based on time feature')
+    parser.add_argument('--time-skip', dest='time_skip', type=int,
+                        default=3, help='Number of time slices to skip')
     parser.add_argument('--no-stratified-split', dest='stratified_split',
                         default=True, action='store_false',
                         help='Do not create proportionally balanced sets')
@@ -150,7 +153,7 @@ def serialize_json(obj):
     if isinstance(obj, np.generic):
         return obj.item()
 
-    raise TypeError("Type '{}' is not serializable".format(type(obj)))
+    raise TypeError("Type '{}' is not serializable ({!r})".format(type(obj), obj))
 
 class Classification(object):
     """
@@ -159,6 +162,7 @@ class Classification(object):
 
     def __init__(self, args):
         self.args = args
+        self._results = []
 
     def _export_results(self, data_sets, results):
         predictions = results["labels"]
@@ -166,8 +170,6 @@ class Classification(object):
             logging.info('No prediction output')
         else:
             data_set = data_sets.data_sets[data_sets.VALIDATION]
-            logging.info('Predicted labels: %r', predictions)
-            logging.info('Actual labels: %r', data_set[data_sets.LABELS])
 
             organization_names = np.array(data_sets.organizations)
             keys = {
@@ -192,6 +194,10 @@ class Classification(object):
                 validation = validation_context[:, validation_key]
                 results[result_key] = result_config["filter"](validation)
 
+            logging.info('Projects: %r', results["projects"])
+            logging.info('Sprints: %r', results["sprints"])
+            logging.info('Predicted labels: %r', predictions)
+            logging.info('Actual labels: %r', data_set[data_sets.LABELS])
             results["features"] = data_sets.get_values(data_sets.VALIDATION)
             results["configuration"] = {
                 "label": self.args.label,
@@ -204,6 +210,13 @@ class Classification(object):
                 "stratified": self.args.stratified_sample
             }
 
+        if self.args.combinations or self.args.time:
+            logging.info('Results: %r', results)
+            self._results.append(results)
+        else:
+            self._write_results(results)
+
+    def _write_results(self, results):
         file_opener = get_file_opener(self.args)
         with file_opener(self.args.results, 'w') as results_file:
             simplejson.dump(results, results_file, default=serialize_json,
@@ -290,7 +303,7 @@ class Classification(object):
         data_sets = Dataset(self.args)
         self._run(data_sets)
 
-        if self.args.combinations:
+        if self.args.combinations or self.args.time:
             stop = False
             count = 0
             while count < self.args.max_combinations and not stop:
@@ -305,6 +318,8 @@ class Classification(object):
                     count = count + 1
                 except StopIteration:
                     stop = True
+
+            self._write_results(self._results)
 
 def bootstrap():
     """
