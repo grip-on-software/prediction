@@ -97,8 +97,8 @@ def get_parser():
     parser.add_argument('--weighted', default=False, action='store_true',
                         help='Model can use class weights for balancing')
     parser.add_argument('--time', help='Split dataset based on time feature')
-    parser.add_argument('--time-skip', dest='time_skip', type=int,
-                        default=3, help='Number of time slices to skip')
+    parser.add_argument('--time-size', dest='time_size', type=int,
+                        default=10, help='Minimal size of time dataset')
     parser.add_argument('--no-stratified-split', dest='stratified_split',
                         default=True, action='store_false',
                         help='Do not create proportionally balanced sets')
