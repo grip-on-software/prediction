@@ -587,10 +587,11 @@ class Dataset(object):
         indexes = np.arange(len(dataset))
 
         features = [True] * dataset.shape[1]
-        logging.info('%r', len(self._loader.features))
+        offset = len(self._loader.features)
+        logging.info('%r', offset)
+
         for i in range(0, self.args.roll_sprints+1):
-            offset = i * (len(self._loader.features) + len(self.args.keep_index))
-            features[offset + time_index] = False
+            features[i * offset + time_index] = False
 
         masks = self._make_time_masks(dataset, time_index, current_time)
 
