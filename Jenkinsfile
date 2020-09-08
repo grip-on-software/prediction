@@ -10,7 +10,7 @@ pipeline {
     }
 
     parameters {
-        string(name: 'PREDICTION_ARGS', defaultValue: '--label num_not_done_points+num_removed_points+num_added_points --binary --roll-sprints 3 --roll-labels --replace-na --model dnn --test-interval 200 --num-epochs 1000 --keep-index num_story_points --time time --time-size 105', description: 'Prediction arguments')
+        string(name: 'PREDICTION_ARGS', defaultValue: '--label num_not_done_points+num_removed_points+num_added_points --binary --roll-sprints --roll-labels --replace-na --model dnn --test-interval 200 --num-epochs 1000 --keep-index num_story_points --time time --time-size 105', description: 'Prediction arguments')
         string(name: 'PREDICTION_ORGANIZATIONS', defaultValue: "${env.PREDICTION_ORGANIZATIONS}", description: 'Organizations to include in prediction')
     }
     options {
