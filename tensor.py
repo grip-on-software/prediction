@@ -224,13 +224,14 @@ class Classification(object):
             simplejson.dump(results, results_file, default=serialize_json,
                             ignore_nan=True)
 
-    def run_session(self, model, test_ops, data_sets):
+    def run_session(self, graph, model, test_ops, data_sets):
         """
         Perform the training epoch runs.
         """
 
+        # Allow CPU operations if no GPU implementation is available
         config = tf.ConfigProto(allow_soft_placement=True)
-        with tf.Session(config=config) as sess:
+        with tf.Session(config=config, graph=graph) as sess:
             # Create the op for initializing variables.
             init_op = tf.group(tf.global_variables_initializer(),
                                tf.local_variables_initializer())
@@ -240,9 +241,9 @@ class Classification(object):
             run_class = model.RUNNER
             runner = run_class(self.args, sess, model, test_ops)
             if self.args.train:
-                runner.run(data_sets)
+                runner.run(graph, data_sets)
 
-            results = runner.evaluate(data_sets)
+            results = runner.evaluate(graph, data_sets)
             self._export_results(data_sets, results)
 
     def _clean(self):
@@ -261,38 +262,40 @@ class Classification(object):
 
     def _run(self, data_sets):
         # Tell TensorFlow that the model will be built into the default Graph.
-        with tf.Graph().as_default():
-            if self.args.seed is not None:
-                tf.set_random_seed(self.args.seed)
+        graph = tf.Graph()
+        with graph.as_default():
+            with graph.device(self.args.device):
+                if self.args.seed is not None:
+                    tf.set_random_seed(self.args.seed)
 
-            # Create the training batches, network, and training ops.
-            batch_set = data_sets.get_batches(data_sets.TRAIN)
-            inputs = batch_set[data_sets.INPUTS]
-            labels = batch_set[data_sets.LABELS]
-            weights = batch_set[data_sets.WEIGHTS]
+                # Create the training batches, network, and training ops.
+                batch_set = data_sets.get_batches(graph, data_sets.TRAIN)
+                inputs = batch_set[data_sets.INPUTS]
+                labels = batch_set[data_sets.LABELS]
+                weights = batch_set[data_sets.WEIGHTS]
 
-            model_class = Model.get_model(self.args.model)
-            model = model_class(self.args,
-                                [inputs.dtype, labels.dtype, weights.dtype],
-                                [data_sets.num_features, data_sets.num_labels])
-            model.build()
+                model_class = Model.get_model(self.args.model)
+                model = model_class(self.args,
+                                    [inputs.dtype, labels.dtype, weights.dtype],
+                                    [data_sets.num_features, data_sets.num_labels])
+                model.build()
 
-            # Create the testing and validation batches and test ops.
-            # These batches must be created after the associated graph is
-            # created but before the session starts.
-            data_sets.get_batches(data_sets.TEST)
-            data_sets.get_batches(data_sets.VALIDATION)
-            if model.outputs is not None:
-                logging.info('%r', model.outputs)
-                pred = tf.argmax(model.outputs, 1)
-                correct = tf.equal(pred, model.y_labels)
-                accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
-            else:
-                accuracy = None
-                pred = None
+                # Create the testing and validation batches and test ops.
+                # These batches must be created after the associated graph is
+                # created but before the session starts.
+                data_sets.get_batches(graph, data_sets.TEST)
+                data_sets.get_batches(graph, data_sets.VALIDATION)
+                if model.outputs is not None:
+                    logging.info('%r', model.outputs)
+                    pred = tf.argmax(model.outputs, 1)
+                    correct = tf.equal(pred, model.y_labels)
+                    accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
+                else:
+                    accuracy = None
+                    pred = None
 
-            if not self.args.dry:
-                self.run_session(model, [accuracy, pred], data_sets)
+                if not self.args.dry:
+                    self.run_session(graph, model, [accuracy, pred], data_sets)
 
     def main(self, _):
         """

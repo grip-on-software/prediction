@@ -765,7 +765,7 @@ class Dataset(object):
         context = self.get_context(dataset)
         return context[:, list(self._feature_indexes)]
 
-    def get_batches(self, data_set):
+    def get_batches(self, graph, data_set):
         """
         Create batches of the input/labels. This must be called at least once
         before a graph is set up, otherwise the batching will stall.
@@ -776,56 +776,55 @@ class Dataset(object):
         if data_set not in self.data_sets:
             raise IndexError('Data set #{} does not exist'.format(data_set))
 
-        with tf.name_scope('input'):
+        with graph.name_scope('input'):
             # Input data
-            with tf.device(self.args.device):
-                inputs, labels, weights = [
-                    tf.constant(item) for item in self.data_sets[data_set][0:3]
+            inputs, labels, weights = [
+                tf.constant(item) for item in self.data_sets[data_set][0:3]
+            ]
+            # Indexes within the set
+            indexes = tf.constant(list(range(len(self.data_sets[data_set][0]))))
+            weather = tf.constant(self.data_sets[data_set][self.WEATHER])
+
+            # Only loop through the validation set once and remain order.
+            if data_set == self.VALIDATION:
+                num_epochs = 1
+                capacity = len(self.data_sets[data_set][0])
+                shuffle = False
+            else:
+                num_epochs = self.args.num_epochs
+                capacity = 32
+                shuffle = True
+
+            inputs, labels, weights, indexes = \
+                tf.train.slice_input_producer([inputs, labels, weights, indexes],
+                                              num_epochs=num_epochs,
+                                              capacity=capacity,
+                                              shuffle=shuffle,
+                                              seed=self.args.seed)
+
+            if self.args.stratified_sample:
+                target_prob = [
+                    1/float(self.num_labels) for _ in range(self.num_labels)
                 ]
-                # Indexes within the set
-                indexes = tf.constant(list(range(len(self.data_sets[data_set][0]))))
-                weather = tf.constant(self.data_sets[data_set][self.WEATHER])
-
-                # Only loop through the validation set once and remain order.
-                if data_set == self.VALIDATION:
-                    num_epochs = 1
-                    capacity = len(self.data_sets[data_set][0])
-                    shuffle = False
-                else:
-                    num_epochs = self.args.num_epochs
-                    capacity = 32
-                    shuffle = True
-
+                kwargs = {
+                    'queue_capacity': capacity,
+                    'init_probs': self.ratios,
+                    'threads_per_queue': self.args.num_threads
+                }
+                tensors, labels = \
+                    tf.contrib.training.stratified_sample([inputs, weights, indexes],
+                                                          labels,
+                                                          target_prob,
+                                                          self.args.batch_size,
+                                                          **kwargs)
+                inputs, weights, indexes = tensors
+            else:
                 inputs, labels, weights, indexes = \
-                    tf.train.slice_input_producer([inputs, labels, weights, indexes],
-                                                  num_epochs=num_epochs,
-                                                  capacity=capacity,
-                                                  shuffle=shuffle,
-                                                  seed=self.args.seed)
-
-                if self.args.stratified_sample:
-                    target_prob = [
-                        1/float(self.num_labels) for _ in range(self.num_labels)
-                    ]
-                    kwargs = {
-                        'queue_capacity': capacity,
-                        'init_probs': self.ratios,
-                        'threads_per_queue': self.args.num_threads
-                    }
-                    tensors, labels = \
-                        tf.contrib.training.stratified_sample([inputs, weights, indexes],
-                                                              labels,
-                                                              target_prob,
-                                                              self.args.batch_size,
-                                                              **kwargs)
-                    inputs, weights, indexes = tensors
-                else:
-                    inputs, labels, weights, indexes = \
-                        tf.train.batch([inputs, labels, weights, indexes],
-                                       batch_size=self.args.batch_size,
-                                       capacity=capacity,
-                                       num_threads=self.args.num_threads,
-                                       allow_smaller_final_batch=True)
+                    tf.train.batch([inputs, labels, weights, indexes],
+                                   batch_size=self.args.batch_size,
+                                   capacity=capacity,
+                                   num_threads=self.args.num_threads,
+                                   allow_smaller_final_batch=True)
 
         self._batches[data_set] = [inputs, labels, weights, weather, indexes]
         return self._batches[data_set]

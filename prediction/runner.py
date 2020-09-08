@@ -31,7 +31,7 @@ class Runner(object):
         # Input enqueue coordinator
         self._coordinator = tf.train.Coordinator()
 
-    def run(self, datasets):
+    def run(self, graph, datasets):
         """
         Perform the iterative optimization task.
         """
@@ -41,7 +41,7 @@ class Runner(object):
                                                coord=self._coordinator)
 
         try:
-            self.loop(datasets)
+            self.loop(graph, datasets)
         finally:
             # When done, ask the threads to stop.
             self._coordinator.request_stop()
@@ -49,7 +49,7 @@ class Runner(object):
         # Wait for threads to finish.
         self._coordinator.join(threads)
 
-    def loop(self, datasets):
+    def loop(self, graph, datasets):
         """
         Perform the internal loop of iterative training and test accuracy
         reporting.
@@ -57,7 +57,7 @@ class Runner(object):
 
         raise NotImplementedError('Must be implemented by subclasses')
 
-    def evaluate(self, datasets):
+    def evaluate(self, graph, datasets):
         """
         Calculate labels for a validation set. If possible, any metrics about
         this set may be reported as well. Returns a dictionary containing the
@@ -100,15 +100,15 @@ class TFRunner(Runner):
             self._indexes_placeholder: batch_indexes
         }
 
-    def loop(self, datasets):
+    def loop(self, graph, datasets):
         # Create a saver for writing training checkpoints.
         if self.args.save:
             saver = tf.train.Saver(max_to_keep=self.args.num_checkpoints)
         else:
             saver = None
 
-        train_batch_ops = datasets.get_batches(datasets.TRAIN)
-        test_batch_ops = datasets.get_batches(datasets.TEST)
+        train_batch_ops = datasets.get_batches(graph, datasets.TRAIN)
+        test_batch_ops = datasets.get_batches(graph, datasets.TEST)
 
         try:
             step = 0
@@ -211,8 +211,8 @@ class TFRunner(Runner):
 
         return item[result]
 
-    def evaluate(self, datasets):
-        validation_batch_ops = datasets.get_batches(datasets.VALIDATION)
+    def evaluate(self, graph, datasets):
+        validation_batch_ops = datasets.get_batches(graph, datasets.VALIDATION)
         stop = False
         labels = []
         results = {}
@@ -248,11 +248,11 @@ class FullTrainRunner(TFRunner):
         self._train_inputs = None
         self._train_labels = None
 
-    def loop(self, datasets):
+    def loop(self, graph, datasets):
         train = datasets.data_sets[datasets.TRAIN]
         self._train_inputs = train[datasets.INPUTS]
         self._train_labels = train[datasets.LABELS]
-        super(FullTrainRunner, self).loop(datasets)
+        super(FullTrainRunner, self).loop(graph, datasets)
 
     def _build_feed(self, batch_ops, dataset=Dataset.TRAIN):
         feed_dict = super(FullTrainRunner, self)._build_feed(batch_ops,
@@ -280,22 +280,22 @@ class TFEstimatorRunner(Runner):
     Runner for TensorFlow estimator models.
     """
 
-    def _get_input(self, datasets, data_set):
+    def _get_input(self, graph, datasets, data_set):
         # Enforce new graph
         datasets.clear_batches(data_set)
-        inputs, labels, weights = datasets.get_batches(data_set)[0:3]
+        inputs, labels, weights = datasets.get_batches(graph, data_set)[0:3]
         input_columns = {
             self._model.INPUT_COLUMN: inputs,
             self._model.WEIGHT_COLUMN: weights
         }
         return input_columns, tf.reshape(labels, shape=(-1, 1))
 
-    def loop(self, datasets):
+    def loop(self, graph, datasets):
         def _get_train_input():
-            return self._get_input(datasets, datasets.TRAIN)
+            return self._get_input(graph, datasets, datasets.TRAIN)
 
         def _get_test_input():
-            return self._get_input(datasets, datasets.TEST)
+            return self._get_input(graph, datasets, datasets.TEST)
 
         hooks = []
         step = tf.train.StepCounterHook(every_n_steps=self.args.train_interval,
@@ -312,12 +312,12 @@ class TFEstimatorRunner(Runner):
                                     steps=self.args.num_epochs,
                                     hooks=hooks)
 
-    def evaluate(self, datasets):
+    def evaluate(self, graph, datasets):
         def _get_test_input():
-            return self._get_input(datasets, datasets.TEST)
+            return self._get_input(graph, datasets, datasets.TEST)
 
         def _get_validation_input():
-            return self._get_input(datasets, datasets.VALIDATION)
+            return self._get_input(graph, datasets, datasets.VALIDATION)
 
         try:
             metrics = self._model.predictor.evaluate(_get_test_input)
@@ -369,7 +369,7 @@ class TFSKLRunner(Runner):
     Runner for models implemented in TensorFlow but imitating scikit-learn.
     """
 
-    def loop(self, datasets):
+    def loop(self, graph, datasets):
         datasets.clear_batches(datasets.TRAIN)
         datasets.clear_batches(datasets.TEST)
 
@@ -377,7 +377,7 @@ class TFSKLRunner(Runner):
         train_labels = datasets.data_sets[datasets.TRAIN][datasets.LABELS]
         self._model.predictor.fit(train_data, train_labels)
 
-    def evaluate(self, datasets):
+    def evaluate(self, graph, datasets):
         datasets.clear_batches(datasets.VALIDATION)
         inputs = datasets.data_sets[datasets.VALIDATION][0]
         return {
@@ -389,7 +389,7 @@ class KerasRunner(Runner):
     Runner for models implemented in Keras.
     """
 
-    def loop(self, datasets):
+    def loop(self, graph, datasets):
         datasets.clear_batches(datasets.TRAIN)
         datasets.clear_batches(datasets.TEST)
 
@@ -429,7 +429,7 @@ class KerasRunner(Runner):
                                                      batch_size=self.args.batch_size)
             logging.info('%r', zip(self._model.predictor.metrics_names, metrics))
 
-    def evaluate(self, datasets):
+    def evaluate(self, graph, datasets):
         datasets.clear_batches(datasets.VALIDATION)
         inputs = datasets.data_sets[datasets.VALIDATION][0]
         return {
