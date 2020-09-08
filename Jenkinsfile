@@ -119,7 +119,7 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: 'prediction-config', variable: 'PREDICTOR_CONFIGURATION')]) {
-                    sh "python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.${env.BUILD_TAG}.json --store owncloud --device /gpu:${env.EXECUTOR_NUMBER} --config $PREDICTOR_CONFIGURATION"
+                    sh "CUDA_VISIBLE_DEVICES=${env.EXECUTOR_NUMBER} python tensor.py --filename output/sprint_features.${env.BUILD_TAG}.arff --log INFO --seed 123 --clean ${params.PREDICTION_ARGS} --results output/sprint_labels.${env.BUILD_TAG}.json --store owncloud --device /gpu:${env.EXECUTOR_NUMBER} --config $PREDICTOR_CONFIGURATION"
                 }
             }
         }
