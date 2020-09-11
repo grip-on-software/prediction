@@ -339,6 +339,9 @@ class TFEstimatorRunner(Runner):
 
         logging.warning('Outputs: %r', outputs)
         indexes = np.squeeze(outputs["class_ids"])
+        if len(indexes.shape) == 0:
+            indexes = np.array([indexes])
+
         probabilities = datasets.choose(indexes, outputs["probabilities"])
         risk = self._scale_logits(outputs["logits"])
 
@@ -352,6 +355,9 @@ class TFEstimatorRunner(Runner):
     @staticmethod
     def _scale_logits(logits):
         logits = np.nan_to_num(np.squeeze(logits))
+        if len(logits.shape) == 0:
+            logits = np.array([logits])
+
         neg_scaler = MinMaxScaler((0.1, 0.49), copy=True)
         pos_scaler = MinMaxScaler((0.5, 0.99), copy=True)
 
