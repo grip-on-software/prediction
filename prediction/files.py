@@ -40,7 +40,7 @@ class OwnCloudFile(object):
 
         if cls._config is None:
             with open(config_filename) as config_file:
-                cls._config = yaml.load(config_file).get('owncloud')
+                cls._config = yaml.safe_load(config_file).get('owncloud')
 
         return cls._config
 
