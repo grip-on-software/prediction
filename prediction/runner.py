@@ -146,8 +146,8 @@ class TFRunner(Runner):
         batch_size = len(batch_feed[self._model.x_input])
         batch_mean_size = batch_size / float(self.args.batch_size)
         loss = train_values[self._model.LOSS_OP] / batch_mean_size
-        logging.info("step %d (%d samples): loss value %.2f (%.3f sec)", step,
-                     batch_size, loss, duration)
+        logging.info("step %d (%d samples, %.3f sec), loss value(s): %r", step,
+                     batch_size, duration, loss)
 
         if self._summary_op is None:
             summary_str = self._session.run(self._summary_op,
