@@ -387,8 +387,8 @@ class AnalogyBasedEstimation(Model):
                       session.run(self.indices, feed_dict=feed_dict))
         logging.debug('Labels: %r',
                       session.run(self.labels, feed_dict=feed_dict))
-        logging.info('Pred(%f): %f', self.args.pred,
-                     session.run(self._pred, feed_dict=feed_dict))
+        logging.warning('Pred(%f): %f', self.args.pred,
+                        session.run(self._pred, feed_dict=feed_dict))
 
     @property
     def validation_results(self):

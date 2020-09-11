@@ -169,7 +169,7 @@ class Classification(object):
     def _export_results(self, data_sets, results):
         predictions = results["labels"]
         if predictions.size == 0:
-            logging.info('No prediction output')
+            logging.warning('No prediction output')
         else:
             data_set = data_sets.data_sets[data_sets.VALIDATION]
 
@@ -196,10 +196,10 @@ class Classification(object):
                 validation = validation_context[:, validation_key]
                 results[result_key] = result_config["filter"](validation)
 
-            logging.info('Projects: %r', results["projects"])
-            logging.info('Sprints: %r', results["sprints"])
-            logging.info('Predicted labels: %r', predictions)
-            logging.info('Actual labels: %r', data_set[data_sets.LABELS])
+            logging.warning('Projects: %r', results["projects"])
+            logging.warning('Sprints: %r', results["sprints"])
+            logging.warning('Predicted labels: %r', predictions)
+            logging.warning('Actual labels: %r', data_set[data_sets.LABELS])
             results["features"] = data_sets.get_values(data_sets.VALIDATION)
             results["configuration"] = {
                 "label": self.args.label,
@@ -213,7 +213,7 @@ class Classification(object):
             }
 
         if self.args.combinations or self.args.time:
-            logging.info('Results: %r', results)
+            logging.warning('Results: %r', results)
             self._results.append(results)
         else:
             self._write_results(results)
@@ -256,6 +256,7 @@ class Classification(object):
                             level=getattr(logging, self.args.log.upper(), None))
         logging.getLogger('tensorflow').propagate = False
 
+        np.set_printoptions(threshold=sys.getmaxsize)
         if self.args.seed is not None:
             random.seed(self.args.seed)
             np.random.seed(self.args.seed)

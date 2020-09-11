@@ -126,7 +126,7 @@ class TFRunner(Runner):
                 if step % self.args.test_interval == 0:
                     test_feed = self._build_feed(test_batch_ops,
                                                  dataset=datasets.TEST)
-                    logging.info('%r', test_feed)
+                    logging.warning('%r', test_feed)
                     self._test_progress(saver, step, test_feed)
 
                 step = step + 1
@@ -146,8 +146,8 @@ class TFRunner(Runner):
         batch_size = len(batch_feed[self._model.x_input])
         batch_mean_size = batch_size / float(self.args.batch_size)
         loss = train_values[self._model.LOSS_OP] / batch_mean_size
-        logging.info("step %d (%d samples, %.3f sec), loss value(s): %r", step,
-                     batch_size, duration, loss)
+        logging.warning("step %d (%d samples, %.3f sec), loss value(s): %r",
+                        step, batch_size, duration, loss)
 
         if self._summary_op is None:
             summary_str = self._session.run(self._summary_op,
@@ -156,7 +156,7 @@ class TFRunner(Runner):
             writer.add_summary(summary_str, step)
 
         accuracy = self._session.run(self._test_ops, feed_dict=batch_feed)[0]
-        logging.info("train accuracy: %.2f", accuracy)
+        logging.warning("train accuracy: %.2f", accuracy)
 
     def _test_progress(self, saver, step, test_feed):
         self._validate(test_feed)
@@ -175,9 +175,11 @@ class TFRunner(Runner):
 
         average_arg = 'binary' if self.args.binary else None
         precision = sklearn.metrics.precision_score(test_label, pred,
-                                                    average=average_arg)
+                                                    average=average_arg,
+                                                    zero_division=0)
         recall = sklearn.metrics.recall_score(test_label, pred,
-                                              average=average_arg)
+                                              average=average_arg,
+                                              zero_division=0)
         if np.any(precision + recall != 0.0):
             f_score = sklearn.metrics.f1_score(test_label, pred,
                                                average=average_arg)
@@ -185,15 +187,15 @@ class TFRunner(Runner):
             f_score = 0.0
 
         self._model.log_evaluation(self._session, test_feed)
-        logging.info("real labels: %r", test_label)
-        logging.info("predictions: %r", pred)
+        logging.warning("real labels: %r", test_label)
+        logging.warning("predictions: %r", pred)
 
-        logging.info("test accuracy: %r", accuracy)
-        logging.info("precision: %r", precision)
-        logging.info("recall: %r", recall)
-        logging.info("f1: %r", f_score)
-        logging.info("confusion:\n%r",
-                     sklearn.metrics.confusion_matrix(test_label, pred))
+        logging.warning("test accuracy: %r", accuracy)
+        logging.warning("precision: %r", precision)
+        logging.warning("recall: %r", recall)
+        logging.warning("f1: %r", f_score)
+        logging.warning("confusion:\n%r",
+                        sklearn.metrics.confusion_matrix(test_label, pred))
 
         return pred
 
@@ -321,7 +323,7 @@ class TFEstimatorRunner(Runner):
 
         try:
             metrics = self._model.predictor.evaluate(_get_test_input)
-            logging.info('Metrics: %r', metrics)
+            logging.warning('Metrics: %r', metrics)
         except tf.errors.InvalidArgumentError:
             logging.exception('Could not evaluate test set')
             metrics = None
@@ -335,7 +337,7 @@ class TFEstimatorRunner(Runner):
         for key in outputs:
             outputs[key] = np.array(outputs[key])
 
-        logging.info('Outputs: %r', outputs)
+        logging.warning('Outputs: %r', outputs)
         indexes = np.squeeze(outputs["class_ids"])
         probabilities = datasets.choose(indexes, outputs["probabilities"])
         risk = self._scale_logits(outputs["logits"])
@@ -420,14 +422,15 @@ class KerasRunner(Runner):
 
     def _test(self, datasets, epoch, logs): # pylint: disable=unused-argument
         if epoch % self.args.test_interval == 0:
-            logging.info('Test evaluation at epoch %d', epoch)
+            logging.warning('Test evaluation at epoch %d', epoch)
             test_data = datasets.data_sets[datasets.TEST][datasets.INPUTS]
             test_labels = datasets.data_sets[datasets.TEST][datasets.LABELS]
             one_hot_labels = keras.utils.to_categorical(test_labels)
 
             metrics = self._model.predictor.evaluate(test_data, one_hot_labels,
                                                      batch_size=self.args.batch_size)
-            logging.info('%r', zip(self._model.predictor.metrics_names, metrics))
+            logging.warning('%r',
+                            zip(self._model.predictor.metrics_names, metrics))
 
     def evaluate(self, graph, datasets):
         datasets.clear_batches(datasets.VALIDATION)

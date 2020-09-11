@@ -405,7 +405,8 @@ class Dataset(object):
             num_unclassifiable = len(project_splits)
 
         accuracy = (num_correct - num_unclassifiable) / float(len(labels))
-        logging.info('Last sprint weather accuracy (%s): %.2f', name, accuracy)
+        logging.warning('Last sprint weather accuracy (%s): %.2f', name,
+                        accuracy)
         return weather, num_correct, accuracy
 
     def _roll(self, project_data):
@@ -664,7 +665,7 @@ class Dataset(object):
             time_index = \
                 next(self._loader.translate((self.args.time,),
                                             self._loader.feature_translation))
-            logging.info('Time index: %r', time_index)
+            logging.warning('Time index: %r', time_index)
 
             logging.info('%r', dataset[0, :])
             if self._times is None:
