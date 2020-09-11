@@ -256,7 +256,7 @@ class Classification(object):
                             level=getattr(logging, self.args.log.upper(), None))
         logging.getLogger('tensorflow').propagate = False
 
-        np.set_printoptions(threshold=sys.getmaxsize)
+        np.set_printoptions(threshold=sys.maxsize)
         if self.args.seed is not None:
             random.seed(self.args.seed)
             np.random.seed(self.args.seed)
