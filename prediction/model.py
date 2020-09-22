@@ -453,10 +453,15 @@ class DNNModel(EstimatorModel):
                            help='Number of units per hidden layer')
 
     def build(self):
-        run_config = tf.estimator.RunConfig(save_checkpoints_steps=self.args.train_interval,
-                                            keep_checkpoint_max=self.args.num_checkpoints,
-                                            model_dir=self.args.train_directory,
-                                            tf_random_seed=self.args.seed)
+        train_interval = self.args.train_interval
+        num_checkpoints = self.args.num_checkpoints if self.args.save else 0
+        run_config = \
+            tf.estimator.RunConfig(log_step_count_steps=train_interval,
+                                   save_checkpoints_steps=train_interval,
+                                   keep_checkpoint_max=num_checkpoints,
+                                   save_summary_steps=train_interval,
+                                   model_dir=self.args.train_directory,
+                                   tf_random_seed=self.args.seed)
 
         if self.args.weighted:
             weight_column = self.WEIGHT_COLUMN

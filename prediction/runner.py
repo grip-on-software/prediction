@@ -300,24 +300,13 @@ class TFEstimatorRunner(Runner):
             return self._get_input(graph, datasets, datasets.TEST)
 
         hooks = []
-        step = tf.train.StepCounterHook(every_n_steps=self.args.train_interval,
-                                        output_dir=self.args.train_directory)
-        hooks.append(step)
 
-        # Create a saver for writing training checkpoints.
+        # Create a saver for writing checkpoints for test restoring.
+        # The model itself may also save checkpoints itself.
         if self.args.save:
             cpt = tf.train.CheckpointSaverHook(self.args.train_directory,
                                                save_steps=self.args.test_interval)
             hooks.append(cpt)
-
-        with graph.as_default():
-            summary_op = tf.summary.merge_all()
-
-        if summary_op is not None:
-            ssh = tf.train.SummarySaverHook(save_steps=self.args.train_interval,
-                                            output_dir=self.args.train_directory,
-                                            summary_op=summary_op)
-            hooks.append(ssh)
 
         self._model.predictor.train(_get_train_input,
                                     steps=self.args.num_epochs,
