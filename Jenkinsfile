@@ -49,6 +49,23 @@ pipeline {
                 }
             }
         }
+        stage('Early exit') {
+            when {
+                expression {
+                    currentBuild.rawBuild.getCause(hudson.triggers.TimerTrigger$TimerTriggerCause) == null
+                }
+                expression {
+                    currentBuild.rawBuild.getCause(hudson.model.Cause$UserIdCause) == null
+                }
+                branch pattern: "time-machine\$", comparator: "REGEXP"
+            }
+            steps {
+                script {
+                    currentBuild.getRawBuild().getExecutor().interrupt(Result.UNSTABLE)
+                    sleep(1)
+                }
+            }
+        }
         stage('Collect') {
             agent {
                 docker {
