@@ -310,10 +310,11 @@ class TFEstimatorRunner(Runner):
                                                save_steps=self.args.test_interval)
             hooks.append(cpt)
 
-        if self._summary_op is not None:
+        summary_op = tf.summary.merge_all()
+        if summary_op is not None:
             ssh = tf.train.SummarySaverHook(save_steps=self.args.train_interval,
                                             output_dir=self.args.train_directory,
-                                            summry_op=self._summary_op)
+                                            summry_op=summary_op)
             hooks.append(ssh)
 
         self._model.predictor.train(_get_train_input,
