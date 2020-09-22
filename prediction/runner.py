@@ -149,7 +149,7 @@ class TFRunner(Runner):
         logging.warning("step %d (%d samples, %.3f sec), loss value(s): %r",
                         step, batch_size, duration, loss)
 
-        if self._summary_op is None:
+        if self._summary_op is not None:
             summary_str = self._session.run(self._summary_op,
                                             feed_dict=batch_feed)
             writer = tf.summary.FileWriterCache.get(self.args.train_directory)
@@ -309,6 +309,12 @@ class TFEstimatorRunner(Runner):
             cpt = tf.train.CheckpointSaverHook(self.args.train_directory,
                                                save_steps=self.args.test_interval)
             hooks.append(cpt)
+
+        if self._summary_op is not None:
+            ssh = tf.train.SummarySaverHook(save_steps=self.args.train_interval,
+                                            output_dir=self.args.train_directory,
+                                            summry_op=self._summary_op)
+            hooks.append(ssh)
 
         self._model.predictor.train(_get_train_input,
                                     steps=self.args.num_epochs,
