@@ -57,7 +57,7 @@ pipeline {
                 expression {
                     currentBuild.rawBuild.getCause(hudson.model.Cause$UserIdCause) == null
                 }
-                branch pattern: "time-machine\$", comparator: "REGEXP"
+                branch pattern: ".*time-machine\$", comparator: "REGEXP"
             }
             steps {
                 script {
