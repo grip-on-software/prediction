@@ -670,7 +670,13 @@ class Dataset(object):
 
             logging.info('%r', dataset[0, :])
             if self._times is None:
-                times = set(dataset[::self.args.time_bin, time_index])
+                # Resort the dataset instances by time index
+                time_set = dataset[dataset[:, time_index].argsort()]
+
+                # Pick proper times (bin to avoid taking too many close ones)
+                times = SortedSet(time_set[::self.args.time_bin, time_index])
+
+                # Initialize generator to select time sets
                 self._times = (current_time for current_time in times
                                if self._check_time_sets(dataset, time_index,
                                                         current_time))
