@@ -191,10 +191,17 @@ class Classification(object):
                 }
             }
             validation_context = data_sets.get_context(data_sets.VALIDATION)
+            metadata = []
             for result_key, result_config in keys.items():
                 validation_key = result_config["key"]
                 validation = validation_context[:, validation_key]
+                metadata.append(validation_key)
                 results[result_key] = result_config["filter"](validation)
+
+            if self.args.time:
+                metadata.append(self.args.time)
+
+            meta_features = data_sets.get_feature_names(metadata)
 
             logging.warning('Projects: %r', results["projects"])
             logging.warning('Sprints: %r', results["sprints"])
@@ -205,7 +212,11 @@ class Classification(object):
                 "label": self.args.label,
                 "labels": data_sets.labels,
                 "assignments": data_sets.assignments,
-                "features": data_sets.features,
+                "features": [
+                    feature for feature in data_sets.features
+                    if feature not in meta_features
+                ],
+                "metadata": meta_features,
                 "model": self.args.model,
                 "binary": self.args.binary,
                 "weighted": self.args.weighted,

@@ -707,6 +707,16 @@ class Dataset(object):
         keys = self._loader.project_split_keys + (self.SPRINT_KEY,)
         logging.info('Validation sprints: %r', validation_context[:, keys])
 
+    def get_feature_names(self, indexes):
+        """
+        Retrieve a list of names of the features at the given indexes.
+        The indexes are first translated in order to convert them to numeric
+        indexes, which are then used to retrieve the feature names.
+        """
+
+        names = self._loader.names
+        return [names[index] for index in self._loader.translate(indexes)]
+
     @property
     def organizations(self):
         """
