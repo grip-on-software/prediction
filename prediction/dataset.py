@@ -60,7 +60,7 @@ class Loader(object):
                 if 0 <= int(index) < self.num_columns:
                     yield int(index)
                 elif -self.num_columns <= int(index) < 0:
-                    yield self.num_columns - int(index)
+                    yield self.num_columns + int(index)
                 else:
                     raise ValueError('Index out of range: {0}'.format(index))
             except ValueError:
