@@ -9,4 +9,4 @@ scikit-learn
 secretstorage
 simplejson
 sortedcontainers
-tensorflow
+tensorflow<2
