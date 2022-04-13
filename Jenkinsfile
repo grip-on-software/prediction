@@ -69,7 +69,7 @@ pipeline {
         stage('Collect') {
             agent {
                 docker {
-                    image '$COLLECTOR_IMAGE'
+                    image "${env.COLLECTOR_IMAGE}"
                     registryUrl "${env.DOCKER_URL}"
                     registryCredentialsId 'docker-credentials'
                     reuseNode true
@@ -88,7 +88,7 @@ pipeline {
             }
             agent {
                 docker {
-                    image '$PREDICTOR_IMAGE'
+                    image "${env.PREDICTOR_IMAGE}"
                     registryUrl "${env.DOCKER_URL}"
                     registryCredentialsId 'docker-credentials'
                     args '-v /usr/local/share/ca-certificates/:/usr/local/share/ca-certificates/'
@@ -109,7 +109,7 @@ pipeline {
             }
             agent {
                 docker {
-                    image '$PREDICTOR_IMAGE'
+                    image "${env.PREDICTOR_IMAGE}"
                     registryUrl "${env.DOCKER_URL}"
                     registryCredentialsId 'docker-credentials'
                     reuseNode true
@@ -126,7 +126,7 @@ pipeline {
             }
             agent {
                 docker {
-                    image '$PREDICTOR_IMAGE'
+                    image "${env.PREDICTOR_IMAGE}"
                     registryUrl "${env.DOCKER_URL}"
                     registryCredentialsId 'docker-credentials'
                     args '--runtime=nvidia -v /usr/local/share/ca-certificates/:/usr/local/share/ca-certificates/'
@@ -147,7 +147,7 @@ pipeline {
             }
             agent {
                 docker {
-                    image '$PREDICTOR_IMAGE'
+                    image "${env.PREDICTOR_IMAGE}"
                     registryUrl "${env.DOCKER_URL}"
                     registryCredentialsId 'docker-credentials'
                     args '-v /usr/local/share/ca-certificates/:/usr/local/share/ca-certificates/'
@@ -164,7 +164,7 @@ pipeline {
         stage('Format') {
             agent {
                 docker {
-                    image '$COLLECTOR_IMAGE'
+                    image "${env.COLLECTOR_IMAGE}"
                     registryUrl "${env.DOCKER_URL}"
                     registryCredentialsId 'docker-credentials'
                     reuseNode true
