@@ -1,5 +1,20 @@
 """
 TensorFlow based prediction runners.
+
+Copyright 2017-2020 ICTU
+Copyright 2017-2022 Leiden University
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 """
 
 from functools import partial
@@ -12,6 +27,7 @@ import sklearn.metrics
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
 try:
+    # pylint: disable=unused-import
     from tensorflow.contrib.learn.python.learn.estimators.prediction_key import PredictionKey
 except ImportError:
     raise
@@ -337,7 +353,7 @@ class TFEstimatorRunner(Runner):
 
         logging.warning('Outputs: %r', outputs)
         indexes = np.squeeze(outputs["class_ids"])
-        if len(indexes.shape) == 0:
+        if not indexes.shape:
             indexes = np.array([indexes])
 
         probabilities = datasets.choose(indexes, outputs["probabilities"])
@@ -353,7 +369,7 @@ class TFEstimatorRunner(Runner):
     @staticmethod
     def _scale_logits(logits):
         logits = np.nan_to_num(np.squeeze(logits))
-        if len(logits.shape) == 0:
+        if not logits.shape:
             logits = np.array([logits])
 
         neg_scaler = MinMaxScaler((0.1, 0.49), copy=True)

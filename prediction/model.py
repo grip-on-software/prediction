@@ -1,5 +1,20 @@
 """
 TensorFlow prediction models.
+
+Copyright 2017-2020 ICTU
+Copyright 2017-2022 Leiden University
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 """
 
 import logging
@@ -286,16 +301,28 @@ class MultiLayerPerceptron(Model):
                       session.run(self.weights_max, feed_dict=feed_dict),
                       session.run(self.biases_max, feed_dict=feed_dict))
 
-def euclidean_distance(args, batch_input, train_inputs):
+def euclidean_distance(_, batch_input, train_inputs):
+    """
+    Calculate euclidean distance for nearby inputs.
+    """
+
     delta = batch_input[:, tf.newaxis, :] - train_inputs[tf.newaxis, :, :]
     return tf.reduce_sum(delta ** 2, axis=-1) ** 0.5
 
-def cosine_distance(args, batch_input, train_inputs):
+def cosine_distance(_, batch_input, train_inputs):
+    """
+    Calculate cosine distance for nearby inputs.
+    """
+
     left = tf.nn.l2_normalize(batch_input, 1)
     right = tf.nn.l2_normalize(train_inputs, 1)
     return tf.matmul(left, right, adjoint_b=True)
 
 def minkowsky_distance(args, batch_input, train_inputs):
+    """
+    Calculate Minkowsky distance for nearby inputs.
+    """
+
     exp = tf.constant(args.exponent, dtype=tf.float32)
     left = tf.matmul(tf.expand_dims(tf.reduce_sum(tf.pow(batch_input, exp),
                                                   1), 1),
@@ -311,7 +338,7 @@ def minkowsky_distance(args, batch_input, train_inputs):
                        2 * tf.matmul(batch_input, train_inputs,
                                      transpose_b=True))
 
-@Model.register('abe')
+@Model.register('abe') # pylint: disable=too-many-instance-attributes
 class AnalogyBasedEstimation(Model):
     """
     Model that uses analogy-based estimation to predict an output
@@ -453,6 +480,7 @@ class DNNModel(EstimatorModel):
                            help='Number of units per hidden layer')
 
     def build(self):
+        # pylint: disable=no-member
         train_interval = self.args.train_interval
         num_checkpoints = self.args.num_checkpoints if self.args.save else 0
         run_config = \

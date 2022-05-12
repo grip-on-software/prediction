@@ -1,5 +1,20 @@
 """
 TensorFlow ARFF dataset loader.
+
+Copyright 2017-2020 ICTU
+Copyright 2017-2022 Leiden University
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 """
 
 from collections import OrderedDict
@@ -25,6 +40,11 @@ class Loader(object):
         'where': np.where
     }
 
+    # Indexes of index/label information in the index_labels variable
+    INDEXES = 0
+    LABELS = 1
+    LABEL_INDEXES = 2
+
     def __init__(self, args):
         self.args = args
 
@@ -32,8 +52,7 @@ class Loader(object):
 
         self._feature_meta = OrderedDict.fromkeys(self.names)
 
-        self._indexes, self._labels, self._label_indexes = \
-            self._calculate_indexes()
+        self._index_labels = self._calculate_indexes()
         self._combinations = None
 
     def translate(self, indices, translation=None):
@@ -215,7 +234,7 @@ class Loader(object):
         combinations of those attributes.
         """
 
-        return self._indexes
+        return self._index_labels[self.INDEXES]
 
     @property
     def meta(self):
@@ -233,7 +252,7 @@ class Loader(object):
         values.
         """
 
-        return self._label_indexes
+        return self._index_labels[self.LABEL_INDEXES]
 
     @property
     def names(self):
@@ -271,7 +290,7 @@ class Loader(object):
 
         return [
             name for index, name in enumerate(self._meta)
-            if index in self._label_indexes
+            if index in self._index_labels[self.LABEL_INDEXES]
         ]
 
     @property
@@ -339,16 +358,15 @@ class Loader(object):
         Retrieve the dataset and labels based on selection criteria.
         """
 
+        indexes = self._index_labels[self.INDEXES]
         if self.args.combinations:
-            indexes = self._select_combination(self._indexes)
-        else:
-            indexes = self._indexes
+            indexes = self._select_combination(indexes)
 
         logging.debug('Selected combination of indexes: %r', indexes)
         dataset = self._full_data[:, tuple(indexes)]
         if self.args.replace_na is not False:
             dataset[~np.isfinite(dataset)] = self.args.replace_na
-        return dataset, indexes, self._labels
+        return dataset, indexes, self._index_labels[self.LABELS]
 
 class Dataset(object):
     """
@@ -373,12 +391,10 @@ class Dataset(object):
     ORGANIZATION_KEY = -1
 
     def __init__(self, args):
-        self.args = args
-
         self.data_sets = None
         self.num_labels = None
 
-        self._loader = Loader(self.args)
+        self._loader = Loader(args)
         self._feature_indexes = None
         self._times = None
         self.load_datasets()
@@ -414,7 +430,7 @@ class Dataset(object):
     def _roll(self, project_data):
         rolls = []
 
-        for i in range(1, self.args.roll_sprints+1):
+        for i in range(1, self._loader.args.roll_sprints+1):
             rolled_data = np.roll(project_data, i, axis=0)
 
             # Mark earliest rolled values as missing
@@ -422,8 +438,8 @@ class Dataset(object):
 
             rolls.append(rolled_data)
 
-        if self.args.keep_index:
-            indexes = self._loader.translate(self.args.keep_index,
+        if self._loader.args.keep_index:
+            indexes = self._loader.translate(self._loader.args.keep_index,
                                              self._loader.feature_translation)
             rolls.append(project_data[:, list(indexes)])
 
@@ -439,10 +455,11 @@ class Dataset(object):
     def _trim(self, projects, end=True):
         # After rolling, the first sample is always empty, but we may wish to
         # keep samples with only a few sprints worth of features.
-        trim_start = 1 if self.args.keep_incomplete else self.args.roll_sprints
+        trim_start = 1 if self._loader.args.keep_incomplete else \
+            self._loader.args.roll_sprints
 
         if end:
-            trim_end = -2 if self.args.roll_validation else -1
+            trim_end = -2 if self._loader.args.roll_validation else -1
             return np.vstack([p[trim_start:trim_end] for p in projects])
 
         return np.vstack([p[trim_start:] for p in projects])
@@ -452,15 +469,15 @@ class Dataset(object):
 
         # Remove labels and weather data from the normal train/test dataset for
         # removed (incomplete) samples and samples used for validation set
-        if self.args.keep_incomplete:
+        if self._loader.args.keep_incomplete:
             split_mask[0] = False
             split_mask[project_splits] = False
         else:
-            split_mask[0:self.args.roll_sprints] = False
+            split_mask[0:self._loader.args.roll_sprints] = False
 
             project_trims = np.hstack([
                 (project_splits+i)[project_splits+i < len(labels)]
-                for i in range(self.args.roll_sprints)
+                for i in range(self._loader.args.roll_sprints)
             ])
             split_mask[project_trims] = False
 
@@ -469,7 +486,7 @@ class Dataset(object):
         else:
             split_mask[project_splits-1] = False
             split_mask[-1] = False
-            if self.args.roll_validation:
+            if self._loader.args.roll_validation:
                 split_mask[project_splits-2] = False
                 split_mask[-2] = False
 
@@ -481,7 +498,7 @@ class Dataset(object):
         # Remove the sprint at the start of a project in lack of features.
         logging.debug('Project splits: %r', project_splits)
 
-        if self.args.roll_labels:
+        if self._loader.args.roll_labels:
             # Roll the labels of the previous sprint into the features of
             # the current sprint, like how last sprint's weather classification
             # has access to this label as well.
@@ -491,14 +508,14 @@ class Dataset(object):
         indexes = np.arange(len(dataset))
         projects = self._get_splits(project_splits, dataset)
 
-        if self.args.validation_index:
-            i = next(self._loader.translate((self.args.validation_index,),
+        if self._loader.args.validation_index:
+            i = next(self._loader.translate((self._loader.args.validation_index,),
                                             self._loader.feature_translation))
             validation_mask = dataset[:, i] != 0
-            if self.args.roll_validation:
-                validation_mask[project_splits-2] = True
-            else:
-                validation_mask[project_splits-1] = True
+            validation_mask[
+                project_splits-2 if self._loader.args.roll_validation else
+                project_splits-1
+            ] = True
 
             latest_indexes = indexes[validation_mask]
 
@@ -516,7 +533,7 @@ class Dataset(object):
             # features are rolled.
             # Do not alter the indexes because the context from the full data
             # remains the same. Labels are also not rolled.
-            if self.args.roll_validation:
+            if self._loader.args.roll_validation:
                 latest_data = np.vstack([p[-1, :] for p in projects])
             else:
                 latest_data = np.vstack([p[-2:, :][0, :] for p in projects])
@@ -524,7 +541,9 @@ class Dataset(object):
             dataset = self._trim(projects)
             validation_mask = None
 
-        latest_labels = labels[latest_indexes]
+        latest = (latest_data, labels[latest_indexes],
+                  np.full(labels[latest_indexes].shape, 0.5), None,
+                  latest_indexes)
 
         split_mask = self._get_split_mask(project_splits, labels,
                                           validation_mask=validation_mask)
@@ -532,8 +551,6 @@ class Dataset(object):
         labels = labels[split_mask]
         weather = weather[split_mask]
         indexes = indexes[split_mask]
-        latest = (latest_data, latest_labels,
-                  np.full(latest_labels.shape, 0.5), None, latest_indexes)
 
         return dataset, labels, weather, latest, indexes
 
@@ -580,7 +597,7 @@ class Dataset(object):
         test_size = np.count_nonzero(test_mask)
         logging.warning('Time: %d Train: %d Test: %d', current_time,
                         train_size, test_size)
-        return train_size > self.args.time_size and test_size > 0
+        return train_size > self._loader.args.time_size and test_size > 0
 
     def _assemble_time_sets(self, time_index, current_time, *data_set):
         dataset = data_set[self.INPUTS]
@@ -592,7 +609,7 @@ class Dataset(object):
         offset = len(self._loader.features)
         logging.info('%r', offset)
 
-        for i in range(0, self.args.roll_sprints+1):
+        for i in range(0, self._loader.args.roll_sprints+1):
             features[i * offset + time_index] = False
 
         masks = self._make_time_masks(dataset, time_index, current_time)
@@ -625,8 +642,9 @@ class Dataset(object):
             train_weather, test_weather, \
             train_indexes, test_indexes = \
             train_test_split(*items,
-                             test_size=self.args.test_size,
-                             stratify=items[self.LABELS] if self.args.stratified_split else None)
+                             test_size=self._loader.args.test_size,
+                             stratify=items[self.LABELS] \
+                                 if self._loader.args.stratified_split else None)
 
         train_data, test_data, validation_data = \
             self._scale([train_data, test_data, validation[self.INPUTS]])
@@ -654,7 +672,7 @@ class Dataset(object):
         weather = self._last_sprint_weather_accuracy(labels, project_splits,
                                                      name='full dataset')[0]
 
-        if self.args.roll_sprints > 0:
+        if self._loader.args.roll_sprints > 0:
             dataset, labels, weather, validation, indexes = \
                 self._roll_sprints(project_splits, dataset, labels, weather)
         else:
@@ -664,9 +682,9 @@ class Dataset(object):
 
         self.num_labels = max(labels) + 1
 
-        if self.args.time:
+        if self._loader.args.time:
             time_index = \
-                next(self._loader.translate((self.args.time,),
+                next(self._loader.translate((self._loader.args.time,),
                                             self._loader.feature_translation))
             logging.warning('Time index: %r', time_index)
 
@@ -676,7 +694,7 @@ class Dataset(object):
                 time_set = dataset[dataset[:, time_index].argsort()]
 
                 # Pick proper times (bin to avoid taking too many close ones)
-                times = SortedSet(time_set[::self.args.time_bin, time_index])
+                times = SortedSet(time_set[::self._loader.args.time_bin, time_index])
 
                 # Initialize generator to select time sets
                 self._times = (current_time for current_time in times
@@ -809,41 +827,39 @@ class Dataset(object):
             if data_set == self.VALIDATION:
                 num_epochs = 1
                 capacity = len(self.data_sets[data_set][0])
-                shuffle = False
             else:
-                num_epochs = self.args.num_epochs
+                num_epochs = self._loader.args.num_epochs
                 capacity = 32
-                shuffle = True
 
             inputs, labels, weights, indexes = \
                 tf.train.slice_input_producer([inputs, labels, weights, indexes],
                                               num_epochs=num_epochs,
                                               capacity=capacity,
-                                              shuffle=shuffle,
-                                              seed=self.args.seed)
+                                              shuffle=data_set != self.VALIDATION,
+                                              seed=self._loader.args.seed)
 
-            if self.args.stratified_sample:
+            if self._loader.args.stratified_sample:
                 target_prob = [
                     1/float(self.num_labels) for _ in range(self.num_labels)
                 ]
                 kwargs = {
                     'queue_capacity': capacity,
                     'init_probs': self.ratios,
-                    'threads_per_queue': self.args.num_threads
+                    'threads_per_queue': self._loader.args.num_threads
                 }
                 tensors, labels = \
                     tf.contrib.training.stratified_sample([inputs, weights, indexes],
                                                           labels,
                                                           target_prob,
-                                                          self.args.batch_size,
+                                                          self._loader.args.batch_size,
                                                           **kwargs)
                 inputs, weights, indexes = tensors
             else:
                 inputs, labels, weights, indexes = \
                     tf.train.batch([inputs, labels, weights, indexes],
-                                   batch_size=self.args.batch_size,
+                                   batch_size=self._loader.args.batch_size,
                                    capacity=capacity,
-                                   num_threads=self.args.num_threads,
+                                   num_threads=self._loader.args.num_threads,
                                    allow_smaller_final_batch=True)
 
         self._batches[data_set] = [inputs, labels, weights, weather, indexes]
