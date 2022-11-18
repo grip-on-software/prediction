@@ -1,0 +1,177 @@
+{
+    "$id": "https://gros.liacs.nl/schema/prediction/sprint_labels.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Sprint labels",
+    "description": "Results of predictions.",
+    "$comment": "Intermediate artifact to be processed by data-analysis sprint_results.r",
+    "oneOf": [
+        {"$ref": "#/$defs/sprint_labels"},
+        {
+            "type": "array",
+            "items": {"$ref": "#/$defs/sprint_labels"}
+        }
+    ],
+    "$defs": {
+        "sprint_labels": {
+            "type": "object",
+            "properties": {
+                "labels": {
+                    "type": "array",
+                    "items": {
+                        "description": "Classification label for the sprint from the model.",
+                        "type": "integer"
+                    }
+                },
+                "probabilities": {
+                    "type": "array",
+                    "items": {
+                        "description": "Reliability of the predicted label for the sprint according to the estimator model.",
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0
+                    }
+                },
+                "risks": {
+                    "type": "array",
+                    "items": {
+                        "description": "Chance that the sprint will receive a negative classification after all, based on internal activations of the estimator model but with external normalized scale.",
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0
+                    }
+                },
+                "analogy_distances": {
+                    "type": "array",
+                    "items": {
+                        "description": "Distances to the closest sprint samples based on a normalized feature distance metric.",
+                        "type": "array",
+                        "items": {"type": "number"}
+                    }
+                },
+                "analogy_indexes": {
+                    "type": "array",
+                    "items": {
+                        "description": "Array indexes of the closest sprint samples.",
+                        "type": "array",
+                        "items": {"type": "integer"}
+                    }
+                },
+                "analogy_labels": {
+                    "type": "array",
+                    "items": {
+                        "description": "Labels of the closest sprint samples.",
+                        "type": "array",
+                        "items": {"type": "integer"}
+                    }
+                },
+                "analogy_values": {
+                    "type": "array",
+                    "items": {
+                        "description": "Values of the features of the closest sprint samples.",
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {"type": ["number", "null"]}
+                        }
+                    }
+                },
+                "metrics": {
+                    "type": "object",
+                    "patternProperties": {
+                        ".*": {"type": "number"}
+                    }
+                },
+                "projects": {
+                    "type": "array",
+                    "items": {
+                        "description": "Identifier of the project which the sprint that is being labeled at this index is from.",
+                        "type": "integer"
+                    }
+                },
+                "sprints": {
+                    "type": "array",
+                    "items": {
+                        "description": "Identifier of the sprint that is being labeled at this index.",
+                        "type": "integer"
+                    }
+                },
+                "organizations": {
+                    "type": "array",
+                    "items": {
+                        "description": "Organization which the sprint that is being labeled at this index is from.",
+                        "type": "string"
+                    }
+                },
+                "features": {
+                    "type": "array",
+                    "items": {
+                        "description": "Values of the features for a sample sprint, used as input for the model.",
+                        "type": "array",
+                        "items": {
+                            "type": ["number", "null"]
+                        }
+                    }
+                },
+                "configuration": {
+                    "type": "object",
+                    "properties": {
+                        "label": {
+                            "description": "Name or expression of the label used as target output in the model.",
+                            "type": "string"
+                        },
+                        "labels": {
+                            "type": "array",
+                            "items": {
+                                "description": "Name of a feature used as part of the expression for the target output label.",
+                                "type": "string"
+                            }
+                        },
+                        "assignments": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "array",
+                                    "items": {
+                                        "description": "Feature used in an assignment of another generated feature.",
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        },
+                        "features": { 
+                            "type": "array",
+                            "items": {
+                                "description": "Name of a feature used as input for the model.",
+                                "type": "string"
+                            }
+                        },
+                        "metadata": {
+                            "type": "array",
+                            "items": {
+                                "description": "Name of a column of the data set used as metadata.",
+                                "type": "string"
+                            }
+                        },
+                        "model": {
+                            "description": "Identifier of the model used.",
+                            "type": "string"
+                        },
+                        "binary": {
+                            "description": "Treshold at which a label value is converted to a binary classification, if provided.",
+                            "type": ["number", "null"]
+                        },
+                        "weighted": {
+                            "description": "Whether input values were weighted to produce values at similar scales as input for the model.",
+                            "type": "boolean"
+                        },
+                        "stratified": {
+                            "description": "Whether the data set was resampled (some sample sprints provided more often) in order to create proportionally balanced subsets with normal distributions of the target label, when provided in batches to the model.",
+                            "type": "boolean"
+                        }
+                    }
+                }
+            },
+            "required": ["labels"]
+        }
+    }
+}

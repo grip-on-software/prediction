@@ -8,6 +8,7 @@ env/
 *.arff
 *.csv
 *.json
+!schema/*.json
 *.yml
 *.crt
 profile.txt
