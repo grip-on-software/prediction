@@ -17,7 +17,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from __future__ import print_function
 import argparse
 import logging
 import random
@@ -170,9 +169,9 @@ def serialize_json(obj):
     if isinstance(obj, np.generic):
         return obj.item()
 
-    raise TypeError("Type '{}' is not serializable ({!r})".format(type(obj), obj))
+    raise TypeError(f"Type '{type(obj)}' is not serializable ({obj!r})")
 
-class Classification(object):
+class Classification:
     """
     Classification of sprint features.
     """

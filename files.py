@@ -17,7 +17,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from __future__ import print_function
 import argparse
 from prediction.files import get_file_opener
 
@@ -44,12 +43,12 @@ def main():
     opener = get_file_opener(args)
 
     for upload in args.upload:
-        with open(upload, 'r') as local_file:
+        with open(upload, 'r', encoding='utf-8') as local_file:
             with opener(upload, 'w') as upload_file:
                 upload_file.write(local_file.read())
 
     for download in args.download:
-        with open(download, 'w') as local_file:
+        with open(download, 'w', encoding='utf-8') as local_file:
             with opener(download, 'r') as download_file:
                 local_file.write(download_file.read())
 

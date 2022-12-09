@@ -38,7 +38,7 @@ def get_file_opener(args):
 
     raise ValueError('Invalid file opener')
 
-class OwnCloudFile(object):
+class OwnCloudFile:
     """
     Handler for opening a file on ownCloud
     """
@@ -54,7 +54,7 @@ class OwnCloudFile(object):
         """
 
         if cls._config is None:
-            with open(config_filename) as config_file:
+            with open(config_filename, encoding='utf-8') as config_file:
                 cls._config = yaml.safe_load(config_file).get('owncloud')
 
         return cls._config

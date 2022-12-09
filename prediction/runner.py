@@ -29,11 +29,11 @@ import tensorflow as tf
 try:
     # pylint: disable=unused-import
     from tensorflow.contrib.learn.python.learn.estimators.prediction_key import PredictionKey
-except ImportError:
-    raise
+except ImportError as _error:
+    raise ImportError('Cannot import PredictionKey') from _error
 from .dataset import Dataset
 
-class Runner(object):
+class Runner:
     """
     Train/optimize runner.
     """
@@ -90,7 +90,7 @@ class TFRunner(Runner):
     """
 
     def __init__(self, args, session, model, test_ops):
-        super(TFRunner, self).__init__(args, session, model, test_ops)
+        super().__init__(args, session, model, test_ops)
 
         # Build the summary operation based on the collection of summaries.
         self._summary_op = tf.summary.merge_all()
@@ -262,7 +262,7 @@ class FullTrainRunner(TFRunner):
     """
 
     def __init__(self, args, session, model, test_ops):
-        super(FullTrainRunner, self).__init__(args, session, model, test_ops)
+        super().__init__(args, session, model, test_ops)
         self._train_inputs = None
         self._train_labels = None
 
@@ -270,11 +270,10 @@ class FullTrainRunner(TFRunner):
         train = datasets.data_sets[datasets.TRAIN]
         self._train_inputs = train[datasets.INPUTS]
         self._train_labels = train[datasets.LABELS]
-        super(FullTrainRunner, self).loop(graph, datasets)
+        super().loop(graph, datasets)
 
     def _build_feed(self, batch_ops, dataset=Dataset.TRAIN):
-        feed_dict = super(FullTrainRunner, self)._build_feed(batch_ops,
-                                                             dataset=dataset)
+        feed_dict = super()._build_feed(batch_ops, dataset=dataset)
 
         if dataset == Dataset.TRAIN:
             train_inputs = np.delete(self._train_inputs,
@@ -345,8 +344,8 @@ class TFEstimatorRunner(Runner):
         samples = self._model.predictor.predict(_get_validation_input)
         outputs = {"class_ids": [], "probabilities": [], "logits": []}
         for sample in samples:
-            for key in outputs:
-                outputs[key].append(sample[key])
+            for key, value in outputs.items():
+                value.append(sample[key])
 
         for key in outputs:
             outputs[key] = np.array(outputs[key])

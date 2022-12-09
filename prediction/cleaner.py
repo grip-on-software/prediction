@@ -21,7 +21,7 @@ import copy
 import glob
 import os
 
-class Cleaner(object):
+class Cleaner:
     """
     File cleaner for TensorFlow checkpoint files.
     """

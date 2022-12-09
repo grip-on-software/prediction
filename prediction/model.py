@@ -22,10 +22,14 @@ import math
 import tensorflow as tf
 import keras.models as km
 import keras.layers as kl
+try:
+    from dbn.tensorflow import SupervisedDBNClassification
+except ImportError as error:
+    SupervisedDBNClassification = None
 from .dataset import Dataset
 from .runner import TFRunner, TFEstimatorRunner, TFSKLRunner, KerasRunner, FullTrainRunner
 
-class Model(object):
+class Model:
     """
     A generic prediction/classification model that can be trained/optimized
     through TensorFlow graphs.
@@ -75,8 +79,6 @@ class Model(object):
         """
         Add arguments to an argument parser.
         """
-
-        pass
 
     def __init__(self, args, dtypes, sizes):
         self.args = args
@@ -163,8 +165,6 @@ class Model(object):
         are to be run.
         """
 
-        pass
-
     @property
     def validation_results(self):
         """
@@ -194,7 +194,7 @@ class MultiLayerPerceptron(Model):
     RUNNER = TFRunner
 
     def __init__(self, args, dtypes, sizes):
-        super(MultiLayerPerceptron, self).__init__(args, dtypes, sizes)
+        super().__init__(args, dtypes, sizes)
         self.weights1 = None
         self.biases1 = None
         self.weights2 = None
@@ -338,8 +338,9 @@ def minkowsky_distance(args, batch_input, train_inputs):
                        2 * tf.matmul(batch_input, train_inputs,
                                      transpose_b=True))
 
-@Model.register('abe') # pylint: disable=too-many-instance-attributes
+@Model.register('abe')
 class AnalogyBasedEstimation(Model):
+    # pylint: disable=too-many-instance-attributes
     """
     Model that uses analogy-based estimation to predict an output
     """
@@ -352,7 +353,7 @@ class AnalogyBasedEstimation(Model):
     }
 
     def __init__(self, args, dtypes, sizes):
-        super(AnalogyBasedEstimation, self).__init__(args, dtypes, sizes)
+        super().__init__(args, dtypes, sizes)
 
         # Placeholders for the full training set
         self.train_inputs = tf.placeholder(dtype=dtypes[0],
@@ -450,7 +451,7 @@ class EstimatorModel(Model):
     WEIGHT_COLUMN = "weight"
 
     def __init__(self, args, dtypes, sizes):
-        super(EstimatorModel, self).__init__(args, dtypes, sizes)
+        super().__init__(args, dtypes, sizes)
         self.predictor = None
         self.columns = [
             tf.contrib.layers.real_valued_column(self.INPUT_COLUMN,
@@ -512,10 +513,8 @@ class DBNModel(EstimatorModel):
     RUNNER = TFSKLRunner
 
     def build(self):
-        try:
-            from dbn.tensorflow import SupervisedDBNClassification
-        except ImportError:
-            raise
+        if SupervisedDBNClassification is None:
+            raise ImportError('DBN package is not installed')
 
         self.predictor = SupervisedDBNClassification(
             hidden_layers_structure=[256, 256],
@@ -535,7 +534,7 @@ class KerasModel(Model):
     RUNNER = KerasRunner
 
     def __init__(self, args, dtypes, sizes):
-        super(KerasModel, self).__init__(args, dtypes, sizes)
+        super().__init__(args, dtypes, sizes)
         self.predictor = None
 
     def build(self):

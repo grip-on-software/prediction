@@ -29,7 +29,7 @@ from sortedcontainers import SortedSet
 import expression
 from .files import get_file_opener
 
-class Loader(object):
+class Loader:
     """
     Dataset loader.
     """
@@ -81,15 +81,15 @@ class Loader(object):
                 elif -self.num_columns <= int(index) < 0:
                     yield self.num_columns + int(index)
                 else:
-                    raise ValueError('Index out of range: {0}'.format(index))
-            except ValueError:
+                    raise ValueError(f'Index out of range: {index}')
+            except ValueError as error:
                 if index in translation:
                     yield translation[index]
                 elif ',' in index:
                     for idx in self.translate(index.split(','), translation):
                         yield idx
                 else:
-                    raise ValueError('Index {0} could not be understood'.format(index))
+                    raise ValueError(f'Index {index} could not be understood') from error
 
     def _get_labels(self, columns):
         parser = expression.Expression_Parser(variables=columns,
@@ -100,8 +100,7 @@ class Loader(object):
             label_indexes.add(column)
             column = self._full_data[:, column]
         elif not isinstance(column, np.ndarray):
-            raise TypeError("Invalid label {0}: {1!r}".format(self.args.label,
-                                                              type(column)))
+            raise TypeError(f"Invalid label {self.args.label}: {type(column)!r}")
 
         label_indexes.update(self.translate(parser.used_variables))
 
@@ -113,7 +112,7 @@ class Loader(object):
         if self.args.binary is not None:
             labels = (column >= self.args.binary).astype(int)
         elif np.any(column - labels) != 0:
-            raise ValueError('Label {0} produced non-round numbers'.format(self.args.label))
+            raise ValueError(f'Label {self.args.label} produced non-round numbers')
 
         return labels, label_indexes
 
@@ -131,9 +130,9 @@ class Loader(object):
 
             values = parser.modified_variables.values()
             if not all(isinstance(value, np.ndarray) for value in values):
-                raise TypeError("Invalid assignment {}".format(assignment))
+                raise TypeError(f"Invalid assignment {assignment}")
 
-            for name in parser.modified_variables.keys():
+            for name in parser.modified_variables:
                 meta[name] = {
                     "attributes": parser.used_variables,
                     "expression": assignment
@@ -368,7 +367,7 @@ class Loader(object):
             dataset[~np.isfinite(dataset)] = self.args.replace_na
         return dataset, indexes, self._index_labels[self.LABELS]
 
-class Dataset(object):
+class Dataset:
     """
     Dataset selector and provider.
     """
@@ -812,7 +811,7 @@ class Dataset(object):
         if data_set in self._batches:
             return self._batches[data_set]
         if data_set not in self.data_sets:
-            raise IndexError('Data set #{} does not exist'.format(data_set))
+            raise IndexError(f'Data set #{data_set} does not exist')
 
         with graph.name_scope('input'):
             # Input data
