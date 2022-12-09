@@ -65,7 +65,7 @@ desktop).
 For both the Docker-based and direct (pip/virtualenv) installation, we have to 
 install a specific version of TensorFlow to work with the current models. This 
 means that the most recent version will not function. The code has been tested 
-with TensorFlow versions 1.12.0 and 1.13.1, but may work with later TensorFlow 
+with TensorFlow versions 1.12.0 and 1.13.2, but may work with later TensorFlow 
 versions before version 2. Note that these versions may get stale by now which 
 causes them to not support recent Python versions. This may mean that the PyPI 
 registry does not provide packages for pip to install for your Python version. 
