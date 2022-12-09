@@ -4,7 +4,7 @@ FROM tensorflow/tensorflow:${TENSORFLOW_VERSION}
 # Install dependencies
 COPY requirements.txt /tmp/
 
-RUN rm /etc/apt/source.list.d/cuda.list && apt-get update && \
+RUN rm -f /etc/apt/sources.list.d/cuda.list && apt-get update && \
 	apt-get install -y --no-install-recommends git g++ libffi-dev libssl-dev && \
     cd /tmp/ && sed -i 's/^tensorflow/#tensorflow/' requirements.txt && \
     pip install -r requirements.txt && \
