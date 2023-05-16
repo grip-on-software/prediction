@@ -51,11 +51,11 @@ pipeline {
         }
         stage('Early exit') {
             when {
-                expression {
-                    currentBuild.rawBuild.getCause(hudson.triggers.TimerTrigger$TimerTriggerCause) == null
+                not {
+                    triggeredBy 'TimerTrigger'
                 }
-                expression {
-                    currentBuild.rawBuild.getCause(hudson.model.Cause$UserIdCause) == null
+                not {
+                    triggeredBy 'UserIdCause'
                 }
                 branch pattern: ".*time-machine\$", comparator: "REGEXP"
             }
